@@ -7,10 +7,11 @@ import (
 // Specification returns the connector's specification.
 func Specification() sdk.Specification {
 	return sdk.Specification{
-		Name:        "notion",
-		Summary:     "<describe your connector>",
-		Description: "<describe your connector in detail>",
-		Version:     "v0.1.0",
-		Author:      "<your name>",
+		Name:         "notion",
+		Summary:      "A Conduit connector for Notion.",
+		Description:  "A Conduit connector for Notion.",
+		Version:      "v0.1.0",
+		Author:       "Meroxa, Inc.",
+		SourceParams: map[string]sdk.Parameter{},
 	}
 }

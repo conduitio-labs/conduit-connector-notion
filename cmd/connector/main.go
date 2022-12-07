@@ -7,5 +7,9 @@ import (
 )
 
 func main() {
-	sdk.Serve(notion.Connector)
+	sdk.Serve(
+		notion.Specification,
+		notion.NewSource,
+		nil,
+	)
 }

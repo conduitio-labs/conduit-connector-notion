@@ -2,11 +2,12 @@ module github.com/github.com/conduitio-labs/conduit-connector-notion
 
 go 1.19
 
-require github.com/conduitio/conduit-connector-sdk v0.3.0
+require github.com/conduitio/conduit-connector-sdk v0.2.0
 
 require (
 	github.com/conduitio/conduit-connector-protocol v0.3.0 // indirect
 	github.com/fatih/color v1.7.0 // indirect
+	github.com/golang/mock v1.6.0 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/hashicorp/go-hclog v0.14.1 // indirect
 	github.com/hashicorp/go-plugin v1.4.3 // indirect

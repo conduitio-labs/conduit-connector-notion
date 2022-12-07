@@ -19,7 +19,7 @@ func NewSource() sdk.Source {
 
 func (s *Source) Parameters() map[string]sdk.Parameter {
 	return map[string]sdk.Parameter{
-		GlobalConfigParam: {
+		Token: {
 			Default:     "localhost:10000",
 			Required:    true,
 			Description: "The URL of the server.",
@@ -34,7 +34,7 @@ func (s *Source) Parameters() map[string]sdk.Parameter {
 
 func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 	sdk.Logger(ctx).Info().Msg("Configuring a Source Connector...")
-	config, err := ParseSourceConfig(cfg)
+	config, err := ParseConfig(cfg)
 	if err != nil {
 		return err
 	}
