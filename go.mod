@@ -1,4 +1,4 @@
-module github.com/conduitio/conduit-connector-connectorName
+module github.com/github.com/conduitio-labs/conduit-connector-notion
 
 go 1.19
 

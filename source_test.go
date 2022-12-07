@@ -1,15 +1,15 @@
-package connectorName_test
+package notion_test
 
 import (
 	"context"
 	"strings"
 	"testing"
 
-	connectorName "github.com/conduitio/conduit-connector-connectorName"
+	notion "github.com/github.com/conduitio-labs/conduit-connector-notion"
 )
 
 func TestConfigureSource_FailsWhenConfigEmpty(t *testing.T) {
-	con := connectorName.Source{}
+	con := notion.Source{}
 	err := con.Configure(context.Background(), make(map[string]string))
 	if err == nil {
 		t.Error("expected error for missing config params")
@@ -21,7 +21,7 @@ func TestConfigureSource_FailsWhenConfigEmpty(t *testing.T) {
 }
 
 func TestTeardownSource_NoOpen(t *testing.T) {
-	con := connectorName.NewSource()
+	con := notion.NewSource()
 	err := con.Teardown(context.Background())
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)
