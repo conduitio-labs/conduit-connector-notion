@@ -2,6 +2,7 @@ package notion
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -9,6 +10,11 @@ import (
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	notion "github.com/jomei/notionapi"
 )
+
+type notionBlock struct {
+	blockType string         `json:"type"`
+	children  []notion.Block `json:"children"`
+}
 
 type Source struct {
 	sdk.UnimplementedSource
@@ -75,29 +81,37 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 		return sdk.Record{}, sdk.ErrBackoffRetry
 	}
 
-	return s.nextPage(ctx)
+	return s.nextObject(ctx)
 }
 
-func (s *Source) nextPage(ctx context.Context) (sdk.Record, error) {
+func (s *Source) nextObject(ctx context.Context) (sdk.Record, error) {
 	if len(s.fetchIDs) == 0 {
 		return sdk.Record{}, errors.New("no page IDs available")
 	}
 	pageID := s.fetchIDs[0]
 	s.fetchIDs = s.fetchIDs[1:]
 
+	// todo support databases
 	sdk.Logger(ctx).Debug().
 		Str("page_id", pageID).
 		Msg("fetching page")
-	page, err := s.client.Page.Get(ctx, notion.PageID(pageID))
+
+	block, err := s.client.Block.Get(ctx, notion.BlockID(pageID))
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed fetching page %v: %w", pageID, err)
 	}
+	// todo support grand-children
+	// check if HasChildren
+	children, err := s.client.Block.GetChildren(ctx, notion.BlockID(pageID), nil)
+	if err != nil {
+		return sdk.Record{}, fmt.Errorf("failed fetching blocks for %v: %w", pageID, err)
+	}
 
-	record, err := s.toRecord(page)
+	record, err := s.blockToRecord(ctx, block, children.Results)
 	if err != nil {
 		return sdk.Record{}, err
 	}
-	s.lastEditedTime = page.LastEditedTime
+	s.lastEditedTime = *block.GetLastEditedTime()
 	return record, nil
 }
 
@@ -159,20 +173,29 @@ func (s *Source) getPages(ctx context.Context, cursor notion.Cursor) (*notion.Se
 	return s.client.Search.Do(ctx, req)
 }
 
-func (s *Source) toRecord(page *notion.Page) (sdk.Record, error) {
+func (s *Source) blockToRecord(ctx context.Context, b notion.Block, cb notion.Blocks) (sdk.Record, error) {
+	nb := notionBlock{
+		blockType: b.GetType().String(),
+		children:  cb,
+	}
+	// todo remove indent
+	payload, err := json.MarshalIndent(b, "", "  ")
+	if err != nil {
+		return sdk.Record{}, fmt.Errorf("failed marshalling payload: %w", err)
+	}
+
+	sdk.Logger(ctx).Debug().Msgf("payload %v", nb)
 	return sdk.Record{
-		Position:  s.getKey(page),
+		Position:  s.getKey(b),
 		Metadata:  nil,
 		CreatedAt: time.Now(),
-		Key:       sdk.RawData(page.ID.String()),
-		Payload: sdk.RawData(
-			fmt.Sprintf("page ID %v, page title: %v", page.ID, s.getTitle(page)),
-		),
+		Key:       sdk.RawData(b.GetID().String()),
+		Payload:   sdk.RawData(payload),
 	}, nil
 }
 
-func (s *Source) getKey(page *notion.Page) sdk.Position {
-	return sdk.Position(page.LastEditedTime.Format(time.RFC3339))
+func (s *Source) getKey(b notion.Block) sdk.Position {
+	return sdk.Position(b.GetLastEditedTime().Format(time.RFC3339))
 }
 
 func (s *Source) getTitle(page *notion.Page) string {
