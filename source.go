@@ -11,9 +11,9 @@ import (
 	notion "github.com/jomei/notionapi"
 )
 
-type notionBlock struct {
-	blockType string         `json:"type"`
-	children  []notion.Block `json:"children"`
+type ParentBlock struct {
+	BlockType string         `json:"type"`
+	Children  []notion.Block `json:"Children"`
 }
 
 type Source struct {
@@ -174,17 +174,17 @@ func (s *Source) getPages(ctx context.Context, cursor notion.Cursor) (*notion.Se
 }
 
 func (s *Source) blockToRecord(ctx context.Context, b notion.Block, cb notion.Blocks) (sdk.Record, error) {
-	nb := notionBlock{
-		blockType: b.GetType().String(),
-		children:  cb,
+	nb := ParentBlock{
+		BlockType: b.GetType().String(),
+		Children:  cb,
 	}
 	// todo remove indent
-	payload, err := json.MarshalIndent(b, "", "  ")
+	payload, err := json.MarshalIndent(nb, "", "  ")
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed marshalling payload: %w", err)
 	}
 
-	sdk.Logger(ctx).Debug().Msgf("payload %v", nb)
+	sdk.Logger(ctx).Debug().Msgf("payload %v", payload)
 	return sdk.Record{
 		Position:  s.getKey(b),
 		Metadata:  nil,
