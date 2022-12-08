@@ -11,7 +11,7 @@ import (
 	notion "github.com/jomei/notionapi"
 )
 
-type NotionBlock struct {
+type recordPayload struct {
 	BlockType string         `json:"type"`
 	Children  []notion.Block `json:"children"`
 }
@@ -93,27 +93,27 @@ func (s *Source) nextObject(ctx context.Context) (sdk.Record, error) {
 	if len(s.fetchIDs) == 0 {
 		return sdk.Record{}, errors.New("no page IDs available")
 	}
-	pageID := s.fetchIDs[0]
+	id := s.fetchIDs[0]
 	s.fetchIDs = s.fetchIDs[1:]
 
-	// todo support databases
 	sdk.Logger(ctx).Debug().
-		Str("page_id", pageID).
-		Msg("fetching page")
+		Str("block_id", id).
+		Msg("fetching block")
 
-	block, err := s.client.Block.Get(ctx, notion.BlockID(pageID))
+	// fetch the block and then all of its children
+	block, err := s.client.Block.Get(ctx, notion.BlockID(id))
 	if err != nil {
-		return sdk.Record{}, fmt.Errorf("failed fetching page %v: %w", pageID, err)
+		return sdk.Record{}, fmt.Errorf("failed fetching block %v: %w", id, err)
 	}
 
 	children, err := s.getChildren(ctx, block)
 	if err != nil {
-		return sdk.Record{}, fmt.Errorf("failed fetching blocks for %v: %w", pageID, err)
+		return sdk.Record{}, fmt.Errorf("failed fetching blocks for %v: %w", id, err)
 	}
 
 	record, err := s.blockToRecord(block, children)
 	if err != nil {
-		return sdk.Record{}, err
+		return sdk.Record{}, fmt.Errorf("failed transforming block %v to record: %w", id, err)
 	}
 	s.lastEditedTime = *block.GetLastEditedTime()
 	return record, nil
@@ -247,13 +247,9 @@ func (s *Source) getPages(ctx context.Context, cursor notion.Cursor) (*notion.Se
 }
 
 func (s *Source) blockToRecord(parent notion.Block, children notion.Blocks) (sdk.Record, error) {
-	nb := NotionBlock{
-		BlockType: parent.GetType().String(),
-		Children:  children,
-	}
-	payload, err := json.Marshal(nb)
+	payload, err := s.getPayload(parent, children)
 	if err != nil {
-		return sdk.Record{}, fmt.Errorf("failed marshalling payload: %w", err)
+		return sdk.Record{}, fmt.Errorf("failed getting payload: %w", err)
 	}
 
 	return sdk.Record{
@@ -261,10 +257,18 @@ func (s *Source) blockToRecord(parent notion.Block, children notion.Blocks) (sdk
 		Metadata:  nil,
 		CreatedAt: time.Now(),
 		Key:       sdk.RawData(parent.GetID().String()),
-		Payload:   sdk.RawData(payload),
+		Payload:   payload,
 	}, nil
 }
 
 func (s *Source) getKey(b notion.Block) sdk.Position {
 	return sdk.Position(b.GetLastEditedTime().Format(time.RFC3339))
+}
+
+func (s *Source) getPayload(parent notion.Block, children notion.Blocks) (sdk.RawData, error) {
+	nb := recordPayload{
+		BlockType: parent.GetType().String(),
+		Children:  children,
+	}
+	return json.Marshal(nb)
 }
