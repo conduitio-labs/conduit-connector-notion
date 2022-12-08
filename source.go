@@ -11,9 +11,9 @@ import (
 	notion "github.com/jomei/notionapi"
 )
 
-type ParentBlock struct {
+type NotionBlock struct {
 	BlockType string         `json:"type"`
-	Children  []notion.Block `json:"Children"`
+	Children  []notion.Block `json:"children"`
 }
 
 type Source struct {
@@ -102,12 +102,12 @@ func (s *Source) nextObject(ctx context.Context) (sdk.Record, error) {
 	}
 	// todo support grand-children
 	// check if HasChildren
-	children, err := s.client.Block.GetChildren(ctx, notion.BlockID(pageID), nil)
+	children, err := s.getChildren(ctx, pageID)
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed fetching blocks for %v: %w", pageID, err)
 	}
 
-	record, err := s.blockToRecord(ctx, block, children.Results)
+	record, err := s.blockToRecord(block, children)
 	if err != nil {
 		return sdk.Record{}, err
 	}
@@ -115,11 +115,41 @@ func (s *Source) nextObject(ctx context.Context) (sdk.Record, error) {
 	return record, nil
 }
 
-func (s *Source) Ack(ctx context.Context, position sdk.Position) error {
+func (s *Source) getChildren(ctx context.Context, blockID string) ([]notion.Block, error) {
+	var children []notion.Block
+
+	fetch := true
+	var cursor notion.Cursor
+	for fetch {
+		resp, err := s.client.Block.GetChildren(
+			ctx,
+			notion.BlockID(blockID),
+			&notion.Pagination{
+				StartCursor: cursor,
+			},
+		)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"failed getting children for block ID %v, cursor %v: %w",
+				blockID,
+				cursor,
+				err,
+			)
+		}
+
+		children = append(children, resp.Results...)
+
+		fetch = resp.HasMore
+		cursor = notion.Cursor(resp.NextCursor)
+	}
+	return children, nil
+}
+
+func (s *Source) Ack(context.Context, sdk.Position) error {
 	return nil
 }
 
-func (s *Source) Teardown(ctx context.Context) error {
+func (s *Source) Teardown(context.Context) error {
 	return nil
 }
 
@@ -173,23 +203,21 @@ func (s *Source) getPages(ctx context.Context, cursor notion.Cursor) (*notion.Se
 	return s.client.Search.Do(ctx, req)
 }
 
-func (s *Source) blockToRecord(ctx context.Context, b notion.Block, cb notion.Blocks) (sdk.Record, error) {
-	nb := ParentBlock{
-		BlockType: b.GetType().String(),
-		Children:  cb,
+func (s *Source) blockToRecord(parent notion.Block, children notion.Blocks) (sdk.Record, error) {
+	nb := NotionBlock{
+		BlockType: parent.GetType().String(),
+		Children:  children,
 	}
-	// todo remove indent
-	payload, err := json.MarshalIndent(nb, "", "  ")
+	payload, err := json.Marshal(nb)
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed marshalling payload: %w", err)
 	}
 
-	sdk.Logger(ctx).Debug().Msgf("payload %v", payload)
 	return sdk.Record{
-		Position:  s.getKey(b),
+		Position:  s.getKey(parent),
 		Metadata:  nil,
 		CreatedAt: time.Now(),
-		Key:       sdk.RawData(b.GetID().String()),
+		Key:       sdk.RawData(parent.GetID().String()),
 		Payload:   sdk.RawData(payload),
 	}, nil
 }
