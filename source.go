@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	sdk "github.com/conduitio/conduit-connector-sdk"
@@ -253,7 +254,7 @@ func (s *Source) blockToRecord(parent notion.Block, children notion.Blocks) (sdk
 	}
 
 	return sdk.Record{
-		Position:  s.getKey(parent),
+		Position:  s.getPosition(parent),
 		Metadata:  nil,
 		CreatedAt: time.Now(),
 		Key:       sdk.RawData(parent.GetID().String()),
@@ -261,8 +262,10 @@ func (s *Source) blockToRecord(parent notion.Block, children notion.Blocks) (sdk
 	}, nil
 }
 
-func (s *Source) getKey(b notion.Block) sdk.Position {
-	return sdk.Position(b.GetLastEditedTime().Format(time.RFC3339))
+func (s *Source) getPosition(b notion.Block) sdk.Position {
+	return sdk.Position(
+		strconv.FormatInt(b.GetLastEditedTime().Unix(), 10),
+	)
 }
 
 func (s *Source) getPayload(parent notion.Block, children notion.Blocks) (sdk.RawData, error) {
