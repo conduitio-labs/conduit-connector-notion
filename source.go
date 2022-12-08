@@ -100,7 +100,7 @@ func (s *Source) nextObject(ctx context.Context) (sdk.Record, error) {
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed fetching page %v: %w", pageID, err)
 	}
-	// todo support grand-children
+
 	children, err := s.getChildren(ctx, block)
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed fetching blocks for %v: %w", pageID, err)
@@ -114,6 +114,7 @@ func (s *Source) nextObject(ctx context.Context) (sdk.Record, error) {
 	return record, nil
 }
 
+// getChildren gets all the child and grand-child blocks of the input block
 func (s *Source) getChildren(ctx context.Context, block notion.Block) ([]notion.Block, error) {
 	var children []notion.Block
 	if !block.GetHasChildren() {
@@ -142,7 +143,15 @@ func (s *Source) getChildren(ctx context.Context, block notion.Block) ([]notion.
 			)
 		}
 
-		children = append(children, resp.Results...)
+		// get grand children as well
+		for _, child := range resp.Results {
+			children = append(children, child)
+			grandChildren, err := s.getChildren(ctx, child)
+			if err != nil {
+				return nil, err
+			}
+			children = append(children, grandChildren...)
+		}
 
 		fetch = resp.HasMore
 		cursor = notion.Cursor(resp.NextCursor)
