@@ -208,6 +208,11 @@ func (s *Source) addToFetchIDs(ctx context.Context, results *notion.SearchRespon
 		switch result.GetObject().String() {
 		case "page":
 			page := result.(*notion.Page)
+			sdk.Logger(ctx).Trace().
+				Str("page_id", page.ID.String()).
+				Time("last_edited_time", page.LastEditedTime).
+				Time("created_time", page.CreatedTime).
+				Msg("checking if page has changed")
 			if s.hasChanged(page) {
 				s.fetchIDs = append(s.fetchIDs, page.ID.String())
 			}
