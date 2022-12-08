@@ -23,10 +23,11 @@ type Source struct {
 	client         *notion.Client
 	lastEditedTime time.Time
 	fetchIDs       []string
+	firstFetch     bool
 }
 
 func NewSource() sdk.Source {
-	return &Source{}
+	return &Source{firstFetch: true}
 }
 
 func (s *Source) Parameters() map[string]sdk.Parameter {
@@ -100,8 +101,7 @@ func (s *Source) nextObject(ctx context.Context) (sdk.Record, error) {
 		return sdk.Record{}, fmt.Errorf("failed fetching page %v: %w", pageID, err)
 	}
 	// todo support grand-children
-	// check if HasChildren
-	children, err := s.getChildren(ctx, pageID)
+	children, err := s.getChildren(ctx, block)
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed fetching blocks for %v: %w", pageID, err)
 	}
@@ -114,15 +114,21 @@ func (s *Source) nextObject(ctx context.Context) (sdk.Record, error) {
 	return record, nil
 }
 
-func (s *Source) getChildren(ctx context.Context, blockID string) ([]notion.Block, error) {
+func (s *Source) getChildren(ctx context.Context, block notion.Block) ([]notion.Block, error) {
 	var children []notion.Block
+	if !block.GetHasChildren() {
+		sdk.Logger(ctx).Debug().
+			Str("block_id", block.GetID().String()).
+			Msg("block has no children")
+		return children, nil
+	}
 
 	fetch := true
 	var cursor notion.Cursor
 	for fetch {
 		resp, err := s.client.Block.GetChildren(
 			ctx,
-			notion.BlockID(blockID),
+			block.GetID(),
 			&notion.Pagination{
 				StartCursor: cursor,
 			},
@@ -130,7 +136,7 @@ func (s *Source) getChildren(ctx context.Context, blockID string) ([]notion.Bloc
 		if err != nil {
 			return nil, fmt.Errorf(
 				"failed getting children for block ID %v, cursor %v: %w",
-				blockID,
+				block.GetID(),
 				cursor,
 				err,
 			)
@@ -156,11 +162,13 @@ func (s *Source) populateIDs(ctx context.Context) error {
 	if len(s.fetchIDs) > 0 {
 		return nil
 	}
-
-	sdk.Logger(ctx).Debug().
-		Dur("poll_interval", s.config.pollInterval).
-		Msg("sleeping before checking for changes")
-	time.Sleep(s.config.pollInterval)
+	if !s.firstFetch {
+		sdk.Logger(ctx).Debug().
+			Dur("poll_interval", s.config.pollInterval).
+			Msg("sleeping before checking for changes")
+		time.Sleep(s.config.pollInterval)
+		s.firstFetch = false
+	}
 
 	sdk.Logger(ctx).Debug().Msg("populating IDs")
 	fetch := true
