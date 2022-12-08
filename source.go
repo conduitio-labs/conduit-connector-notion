@@ -167,8 +167,8 @@ func (s *Source) populateIDs(ctx context.Context) error {
 			Dur("poll_interval", s.config.pollInterval).
 			Msg("sleeping before checking for changes")
 		time.Sleep(s.config.pollInterval)
-		s.firstFetch = false
 	}
+	s.firstFetch = false
 
 	sdk.Logger(ctx).Debug().Msg("populating IDs")
 	fetch := true
