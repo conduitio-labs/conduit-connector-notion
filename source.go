@@ -33,9 +33,14 @@ func NewSource() sdk.Source {
 func (s *Source) Parameters() map[string]sdk.Parameter {
 	return map[string]sdk.Parameter{
 		Token: {
-			Default:     "localhost:10000",
+			Default:     "",
 			Required:    true,
-			Description: "The URL of the server.",
+			Description: "Internal integration token.",
+		},
+		PollInterval: {
+			Default:     "1 minute",
+			Required:    false,
+			Description: "Interval at which we poll Notion for changes. A Go duration string.",
 		},
 	}
 }

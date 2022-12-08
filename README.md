@@ -12,9 +12,10 @@ TBD
 
 ### Configuration
 
-| name    | description                | required | default value |
-|---------|----------------------------|----------|---------------|
-| `token` | Internal integration token | true     | ""            |
+| name           | description                                                         | required | default value |
+|----------------|---------------------------------------------------------------------|----------|---------------|
+| `token`        | Internal integration token.                                         | true     | ""            |
+| `pollInterval` | Interval at which we poll Notion for changes. A Go duration string. | false    | 1 minute      |
 
 ## Known Issues & Limitations
 * Known issue A
