@@ -18,10 +18,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 const (
-	Token = "token"
+	Token        = "token"
+	PollInterval = "pollInterval"
 )
 
 var Required = []string{Token}
@@ -32,7 +34,8 @@ var (
 )
 
 type Config struct {
-	token string
+	token        string
+	pollInterval time.Duration
 }
 
 func ParseConfig(cfg map[string]string) (Config, error) {
@@ -44,7 +47,20 @@ func ParseConfig(cfg map[string]string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
-	return Config{token: cfg[Token]}, nil
+	// set defaults
+	parsed := Config{
+		pollInterval: time.Minute,
+	}
+	parsed.token = cfg[Token]
+
+	if t, ok := cfg[PollInterval]; ok {
+		pi, err := time.ParseDuration(t)
+		if err != nil {
+			return Config{}, fmt.Errorf("cannot parse poll interval %q: %w", t, err)
+		}
+		parsed.pollInterval = pi
+	}
+	return parsed, nil
 }
 
 func checkRequired(cfg map[string]string) error {

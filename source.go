@@ -77,7 +77,6 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 		return sdk.Record{}, fmt.Errorf("failed fetching page IDs: %w", err)
 	}
 	if len(s.fetchIDs) == 0 {
-		// todo configure poll period
 		return sdk.Record{}, sdk.ErrBackoffRetry
 	}
 
@@ -158,6 +157,11 @@ func (s *Source) populateIDs(ctx context.Context) error {
 		return nil
 	}
 
+	sdk.Logger(ctx).Debug().
+		Dur("poll_interval", s.config.pollInterval).
+		Msg("sleeping before checking for changes")
+	time.Sleep(s.config.pollInterval)
+
 	sdk.Logger(ctx).Debug().Msg("populating IDs")
 	fetch := true
 	var cursor notion.Cursor
@@ -198,6 +202,10 @@ func (s *Source) getPages(ctx context.Context, cursor notion.Cursor) (*notion.Se
 		Sort: &notion.SortObject{
 			Direction: notion.SortOrderASC,
 			Timestamp: notion.TimestampLastEdited,
+		},
+		Filter: map[string]string{
+			"property": "object",
+			"value":    "page",
 		},
 	}
 	return s.client.Search.Do(ctx, req)
