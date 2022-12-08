@@ -148,7 +148,7 @@ func (s *Source) getChildren(ctx context.Context, block notion.Block) ([]notion.
 			)
 		}
 
-		// get grand children as well
+		// get grandchildren as well
 		for _, child := range resp.Results {
 			children = append(children, child)
 			grandChildren, err := s.getChildren(ctx, child)
@@ -262,15 +262,4 @@ func (s *Source) blockToRecord(parent notion.Block, children notion.Blocks) (sdk
 
 func (s *Source) getKey(b notion.Block) sdk.Position {
 	return sdk.Position(b.GetLastEditedTime().Format(time.RFC3339))
-}
-
-func (s *Source) getTitle(page *notion.Page) string {
-	title := page.Properties["title"]
-	if title != nil {
-		texts := title.(*notion.TitleProperty).Title
-		for _, text := range texts {
-			return text.PlainText
-		}
-	}
-	return ""
 }
