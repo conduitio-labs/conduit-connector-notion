@@ -15,6 +15,9 @@ The records produced by this connector will contain a plain text representation 
 
 ### Configuration
 
+Firstly, a [Notion integration](https://developers.notion.com/docs/getting-started) is needed. Refer to [Authorization in Notion](https://developers.notion.com/docs/authorization) 
+on how to obtain an authorization token. 
+
 | name           | description                                                                                                     | required | default value |
 |----------------|-----------------------------------------------------------------------------------------------------------------|----------|---------------|
 | `token`        | A token to be used for authorizing requests to Notion. Can be an internal integration or an OAuth access token. | true     | ""            |
