@@ -162,6 +162,7 @@ func (s *Source) populateIDs(ctx context.Context) error {
 	if len(s.fetchIDs) > 0 {
 		return nil
 	}
+	// the first read attempt (when the connector starts)
 	if !s.firstFetch {
 		sdk.Logger(ctx).Debug().
 			Dur("poll_interval", s.config.pollInterval).
@@ -193,7 +194,7 @@ func (s *Source) addToFetchIDs(ctx context.Context, results *notion.SearchRespon
 		switch result.GetObject().String() {
 		case "page":
 			page := result.(*notion.Page)
-			if page.LastEditedTime.After(s.lastEditedTime) {
+			if s.hasChanged(page) {
 				s.fetchIDs = append(s.fetchIDs, page.ID.String())
 			}
 		default:
@@ -202,6 +203,13 @@ func (s *Source) addToFetchIDs(ctx context.Context, results *notion.SearchRespon
 				Msg("object type currently not supported")
 		}
 	}
+}
+
+func (s *Source) hasChanged(page *notion.Page) bool {
+	// see discussion in docs/cdc.md
+	lastTopMinute := time.Now().Truncate(time.Minute)
+	return page.LastEditedTime.After(s.lastEditedTime) &&
+		page.LastEditedTime.Before(lastTopMinute)
 }
 
 func (s *Source) getPages(ctx context.Context, cursor notion.Cursor) (*notion.SearchResponse, error) {
