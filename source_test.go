@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	notion "github.com/github.com/conduitio-labs/conduit-connector-notion"
+	notion "github.com/conduitio-labs/conduit-connector-notion"
 )
 
 func TestConfigureSource_FailsWhenConfigEmpty(t *testing.T) {

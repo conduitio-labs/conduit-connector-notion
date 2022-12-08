@@ -1,53 +1,79 @@
+// Copyright © 2022 Meroxa, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package notion
 
-import "errors"
-
-const (
-	GlobalConfigParam      = "global_config"
-	SourceConfigParam      = "source_config"
-	DestinationConfigParam = "destination_config"
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"time"
 )
 
-var Required = []string{GlobalConfigParam}
+const (
+	Token        = "token"
+	PollInterval = "pollInterval"
+)
+
+var Required = []string{Token}
 
 var (
-	ErrEmptyConfig = errors.New("missing or empty config")
+	ErrEmptyConfig          = errors.New("missing or empty config")
+	ErrRequiredParamMissing = errors.New("required parameter missing")
 )
 
 type Config struct {
-	globalConfigParam string
+	token        string
+	pollInterval time.Duration
 }
 
-type SourceConfig struct {
-	Config
-	sourceConfigParam string
-}
-
-type DestinationConfig struct {
-	Config
-	destinationConfigParam string
-}
-
-func ParseSourceConfig(cfg map[string]string) (SourceConfig, error) {
+func ParseConfig(cfg map[string]string) (Config, error) {
 	err := checkEmpty(cfg)
 	if err != nil {
-		return SourceConfig{}, err
+		return Config{}, err
 	}
-	return SourceConfig{
-		Config:            Config{globalConfigParam: cfg[GlobalConfigParam]},
-		sourceConfigParam: cfg[SourceConfigParam],
-	}, nil
+	err = checkRequired(cfg)
+	if err != nil {
+		return Config{}, err
+	}
+	// set defaults
+	parsed := Config{
+		pollInterval: time.Minute,
+	}
+	parsed.token = cfg[Token]
+
+	if t, ok := cfg[PollInterval]; ok {
+		pi, err := time.ParseDuration(t)
+		if err != nil {
+			return Config{}, fmt.Errorf("cannot parse poll interval %q: %w", t, err)
+		}
+		parsed.pollInterval = pi
+	}
+	return parsed, nil
 }
 
-func ParseDestinationConfig(cfg map[string]string) (DestinationConfig, error) {
-	err := checkEmpty(cfg)
-	if err != nil {
-		return DestinationConfig{}, err
+func checkRequired(cfg map[string]string) error {
+	var missing []string
+	for _, r := range Required {
+		if strings.Trim(cfg[r], " ") == "" {
+			missing = append(missing, r)
+		}
 	}
-	return DestinationConfig{
-		Config:                 Config{globalConfigParam: cfg[GlobalConfigParam]},
-		destinationConfigParam: cfg[DestinationConfigParam],
-	}, nil
+	if len(missing) != 0 {
+		return fmt.Errorf("params %v: %w", missing, ErrRequiredParamMissing)
+	}
+	return nil
 }
 
 func checkEmpty(cfg map[string]string) error {

@@ -1,5 +1,5 @@
-# Conduit Connector for <resource>
-[Conduit](https://conduit.io) for <resource>.
+# Conduit Connector for Notion
+A [Conduit](https://conduit.io) connector for [Notion](https://www.notion.so).
 
 ## How to build?
 Run `make build` to build the connector.
@@ -7,30 +7,25 @@ Run `make build` to build the connector.
 ## Testing
 Run `make test` to run all the unit tests. Run `make test-integration` to run the integration tests.
 
-The Docker compose file at `test/docker-compose.yml` can be used to run the required resource locally.
-
 ## Source
-A source connector pulls data from an external resource and pushes it to downstream resources via Conduit.
+The source connector is able to read new and updated pages in a Notion workspace. Note that this works only for pages
+that are accessible to the Notion integration used with this connector. 
+
+The records produced by this connector will contain a plain text representation of pages read.
 
 ### Configuration
 
-| name                  | description                           | required | default value |
-|-----------------------|---------------------------------------|----------|---------------|
-| `source_config_param` | Description of `source_config_param`. | true     | 1000          |
+Firstly, a [Notion integration](https://developers.notion.com/docs/getting-started) is needed. Refer to [Authorization in Notion](https://developers.notion.com/docs/authorization) 
+on how to obtain an authorization token. 
 
-## Destination
-A destination connector pushes data from upstream resources to an external resource via Conduit.
-
-### Configuration
-
-| name                       | description                                | required | default value |
-|----------------------------|--------------------------------------------|----------|---------------|
-| `destination_config_param` | Description of `destination_config_param`. | true     | 1000          |
+| name           | description                                                                                                     | required | default value |
+|----------------|-----------------------------------------------------------------------------------------------------------------|----------|---------------|
+| `token`        | A token to be used for authorizing requests to Notion. Can be an internal integration or an OAuth access token. | true     | ""            |
+| `pollInterval` | Interval at which we poll Notion for changes. A Go duration string. Cannot be shorter than 1 minute.            | false    | 1 minute      |
 
 ## Known Issues & Limitations
-* Known issue A
-* Limitation A
+* Currently, only pages are supported.
 
 ## Planned work
-- [ ] Item A
-- [ ] Item B
+- [ ] Support databases
+- [ ] Support comments
