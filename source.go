@@ -1,8 +1,21 @@
+// Copyright © 2022 Meroxa, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package notion
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -11,11 +24,6 @@ import (
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	notion "github.com/jomei/notionapi"
 )
-
-type recordPayload struct {
-	BlockType string         `json:"type"`
-	Children  []notion.Block `json:"children"`
-}
 
 type Source struct {
 	sdk.UnimplementedSource
@@ -112,7 +120,7 @@ func (s *Source) nextObject(ctx context.Context) (sdk.Record, error) {
 		return sdk.Record{}, fmt.Errorf("failed fetching blocks for %v: %w", id, err)
 	}
 
-	record, err := s.blockToRecord(block, children)
+	record, err := s.blockToRecord(ctx, block, children)
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed transforming block %v to record: %w", id, err)
 	}
@@ -247,8 +255,8 @@ func (s *Source) getPages(ctx context.Context, cursor notion.Cursor) (*notion.Se
 	return s.client.Search.Do(ctx, req)
 }
 
-func (s *Source) blockToRecord(parent notion.Block, children notion.Blocks) (sdk.Record, error) {
-	payload, err := s.getPayload(parent, children)
+func (s *Source) blockToRecord(ctx context.Context, parent notion.Block, children notion.Blocks) (sdk.Record, error) {
+	payload, err := s.getPayload(ctx, children)
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed getting payload: %w", err)
 	}
@@ -268,10 +276,23 @@ func (s *Source) getPosition(b notion.Block) sdk.Position {
 	)
 }
 
-func (s *Source) getPayload(parent notion.Block, children notion.Blocks) (sdk.RawData, error) {
-	nb := recordPayload{
-		BlockType: parent.GetType().String(),
-		Children:  children,
+func (s *Source) getPayload(ctx context.Context, children notion.Blocks) (sdk.RawData, error) {
+	var payload string
+	for _, c := range children {
+		e, ok := extractors[c.GetType().String()]
+		if !ok {
+			sdk.Logger(ctx).Warn().
+				Str("block_type", c.GetType().String()).
+				Msg("no text extractor registered")
+			continue
+		}
+		text, err := e(c)
+		if err != nil {
+			return nil, err
+		}
+		payload += text
+		payload += "\n"
 	}
-	return json.Marshal(nb)
+
+	return sdk.RawData(payload), nil
 }
