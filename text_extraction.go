@@ -16,6 +16,7 @@ package notion
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -24,6 +25,8 @@ import (
 )
 
 type extractor func(notion.Block) (string, error)
+
+var errNoExtractor = errors.New("no extractor")
 
 var titleExtractor = extractor(func(block notion.Block) (string, error) {
 	bytes, err := json.Marshal(block)
@@ -111,4 +114,12 @@ var extractors = map[string]extractor{
 	"embed":        urlExtractor,
 	"bookmark":     urlExtractor,
 	"link_preview": urlExtractor,
+}
+
+func extractText(b notion.Block) (string, error) {
+	e, ok := extractors[b.GetType().String()]
+	if !ok {
+		return "", fmt.Errorf("block type %v: %w", b.GetType().String(), errNoExtractor)
+	}
+	return e(b)
 }

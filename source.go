@@ -279,14 +279,13 @@ func (s *Source) getPosition(b notion.Block) sdk.Position {
 func (s *Source) getPayload(ctx context.Context, children notion.Blocks) (sdk.RawData, error) {
 	var payload string
 	for _, c := range children {
-		e, ok := extractors[c.GetType().String()]
-		if !ok {
+		text, err := extractText(c)
+		if errors.Is(err, errNoExtractor) {
 			sdk.Logger(ctx).Warn().
 				Str("block_type", c.GetType().String()).
 				Msg("no text extractor registered")
 			continue
 		}
-		text, err := e(c)
 		if err != nil {
 			return nil, err
 		}
