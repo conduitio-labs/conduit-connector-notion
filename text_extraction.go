@@ -45,7 +45,6 @@ var plainTextExtractor = extractor(func(block notion.Block) (string, error) {
 	var result string
 	for _, rt := range richTexts.Array() {
 		result += rt.Get("plain_text").Str
-		result += " "
 	}
 	return result, nil
 })
