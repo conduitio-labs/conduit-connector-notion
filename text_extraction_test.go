@@ -25,6 +25,7 @@ import (
 func TestExtractText_Paragraph(t *testing.T) {
 	is := is.New(t)
 
+	// Text in HTML: A paragraph with a link to <a href="https://conduit.io/">Conduit’s website</a>.
 	blockString := `{
 	  "object": "block",
 	  "id": "64b74001-739d-4e29-a6e9-d81f79bb0877",
@@ -99,5 +100,6 @@ func TestExtractText_Paragraph(t *testing.T) {
 	is.NoErr(err)
 
 	text, err := extractText(b)
-	is.NoErr()
+	is.NoErr(err)
+	is.Equal("A paragraph with a link to Conduit’s website.", text)
 }
