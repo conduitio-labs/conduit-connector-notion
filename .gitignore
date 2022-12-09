@@ -21,6 +21,8 @@
 
 # Binary, built with `make build`
 /conduit-connector-notion
+# GoReleaser output
+dist/
 
 ### OS ###
 .DS_Store
