@@ -5,6 +5,7 @@ go 1.19
 require (
 	github.com/conduitio/conduit-connector-sdk v0.2.0
 	github.com/jomei/notionapi v1.9.3
+	github.com/matryer/is v1.4.0
 )
 
 require (
