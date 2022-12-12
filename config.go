@@ -34,16 +34,20 @@ var (
 )
 
 type Config struct {
-	token        string
+	// token is the authorization token to be used
+	// in requests to the Notion API
+	token string
+	// pollInterval is the interval between subsequents polls
+	// in which we check for changes in Notion.
+	// Given that the last_edited_field is used to detect changes
+	// in Notion, and that it's precision is in minutes,
+	// the poll interval must not be shorter than a minute,
+	// to avoid reading duplicates.
 	pollInterval time.Duration
 }
 
 func ParseConfig(cfg map[string]string) (Config, error) {
-	err := checkEmpty(cfg)
-	if err != nil {
-		return Config{}, err
-	}
-	err = checkRequired(cfg)
+	err := checkRequired(cfg)
 	if err != nil {
 		return Config{}, err
 	}
@@ -57,6 +61,9 @@ func ParseConfig(cfg map[string]string) (Config, error) {
 		pi, err := time.ParseDuration(t)
 		if err != nil {
 			return Config{}, fmt.Errorf("cannot parse poll interval %q: %w", t, err)
+		}
+		if pi < time.Minute {
+			return Config{}, fmt.Errorf("poll interval must not be shorter than a minute (provided: %v)", pi)
 		}
 		parsed.pollInterval = pi
 	}
@@ -72,13 +79,6 @@ func checkRequired(cfg map[string]string) error {
 	}
 	if len(missing) != 0 {
 		return fmt.Errorf("params %v: %w", missing, ErrRequiredParamMissing)
-	}
-	return nil
-}
-
-func checkEmpty(cfg map[string]string) error {
-	if len(cfg) == 0 {
-		return ErrEmptyConfig
 	}
 	return nil
 }
