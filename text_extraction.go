@@ -55,17 +55,15 @@ var urlExtractor = extractor(func(block notion.Block) (string, error) {
 		return "", fmt.Errorf("failed marshalling into JSON: %w", err)
 	}
 
-	var result string
-	url := gjson.Get(string(bytes), block.GetType().String()+".url")
-	result += url.Str
-	result += " "
+	var elems []string
+	elems = append(elems, gjson.Get(string(bytes), block.GetType().String()+".url").Str)
 
 	captions := gjson.Get(string(bytes), block.GetType().String()+".caption")
 	for _, rt := range captions.Array() {
-		result += rt.Get("plain_text").Str
-		result += " "
+		elems = append(elems, rt.Get("plain_text").Str)
 	}
-	return result, nil
+
+	return strings.Join(elems, " "), nil
 })
 
 var fileExtractor = extractor(func(block notion.Block) (string, error) {

@@ -16,90 +16,77 @@ package notion
 
 import (
 	"encoding/json"
+	"os"
 	"testing"
 
 	notion "github.com/jomei/notionapi"
 	"github.com/matryer/is"
 )
 
-func TestExtractText_Paragraph(t *testing.T) {
-	is := is.New(t)
+func TestExtractText(t *testing.T) {
+	testCases := []struct {
+		name  string
+		parse func([]byte) (notion.Block, error)
+		input string
+		want  string
+	}{
+		{
+			name: "Paragraph blocks",
+			parse: func(bytes []byte) (notion.Block, error) {
+				var b notion.ParagraphBlock
+				err := json.Unmarshal(bytes, &b)
+				return b, err
+			},
+			// Text in HTML: A paragraph with a link to <a href="https://conduit.io/">Conduit’s website</a>.
+			input: "./test/paragraph-block.json",
+			want:  "A paragraph with a link to Conduit’s website.",
+		},
+		{
+			name: "Numbered item block",
+			parse: func(bytes []byte) (notion.Block, error) {
+				var b notion.NumberedListItemBlock
+				err := json.Unmarshal(bytes, &b)
+				return b, err
+			},
+			input: "./test/numbered-list-item-block.json",
+			want:  "Numbered item 2",
+		},
+		{
+			name: "Bookmark block",
+			parse: func(bytes []byte) (notion.Block, error) {
+				var b notion.BookmarkBlock
+				err := json.Unmarshal(bytes, &b)
+				return b, err
+			},
+			input: "./test/bookmark-block.json",
+			want:  "https://meroxa.com Meroxa’s web-site",
+		},
+		{
+			name: "Equation block",
+			parse: func(bytes []byte) (notion.Block, error) {
+				var b notion.EquationBlock
+				err := json.Unmarshal(bytes, &b)
+				return b, err
+			},
+			input: "./test/equation-block.json",
+			want:  "|x| = 1",
+		},
+	}
 
-	// Text in HTML: A paragraph with a link to <a href="https://conduit.io/">Conduit’s website</a>.
-	blockString := `{
-	  "object": "block",
-	  "id": "64b74001-739d-4e29-a6e9-d81f79bb0877",
-	  "type": "paragraph",
-	  "created_time": "2022-12-09T16:52:00Z",
-	  "last_edited_time": "2022-12-09T16:55:00Z",
-	  "created_by": {
-		"object": "user",
-		"id": "9f0964c0-d4d5-4943-abf4-773ee8f86dbc"
-	  },
-	  "last_edited_by": {
-		"object": "user",
-		"id": "9f0964c0-d4d5-4943-abf4-773ee8f86dbc"
-	  },
-	  "paragraph": {
-		"rich_text": [
-		  {
-			"type": "text",
-			"text": {
-			  "content": "A paragraph with a link to "
-			},
-			"annotations": {
-			  "bold": false,
-			  "italic": false,
-			  "strikethrough": false,
-			  "underline": false,
-			  "code": false,
-			  "color": "default"
-			},
-			"plain_text": "A paragraph with a link to "
-		  },
-		  {
-			"type": "text",
-			"text": {
-			  "content": "Conduit’s website",
-			  "link": {
-				"url": "https://conduit.io"
-			  }
-			},
-			"annotations": {
-			  "bold": false,
-			  "italic": false,
-			  "strikethrough": false,
-			  "underline": false,
-			  "code": false,
-			  "color": "default"
-			},
-			"plain_text": "Conduit’s website",
-			"href": "https://conduit.io"
-		  },
-		  {
-			"type": "text",
-			"text": {
-			  "content": "."
-			},
-			"annotations": {
-			  "bold": false,
-			  "italic": false,
-			  "strikethrough": false,
-			  "underline": false,
-			  "code": false,
-			  "color": "default"
-			},
-			"plain_text": "."
-		  }
-		],
-		"color": "default"
-	  }
-	}`
-	var b notion.ParagraphBlock
-	err := json.Unmarshal([]byte(blockString), &b)
-	is.NoErr(err)
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			is := is.New(t)
 
-	text, err := extractText(b)
-	is.NoErr(err)
-	is.Equal("A paragraph with a link to Conduit’s website.", text)
+			bytes, err := os.ReadFile(tc.input)
+			is.NoErr(err)
+
+			block, err := tc.parse(bytes)
+			is.NoErr(err)
+
+			got, err := extractText(block)
+			is.NoErr(err)
+			is.Equal(tc.want, got)
+		})
+	}
 }
