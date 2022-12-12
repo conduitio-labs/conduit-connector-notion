@@ -28,20 +28,40 @@ type extractor func(notion.Block) (string, error)
 
 var errNoExtractor = errors.New("no extractor")
 
-var titleExtractor = extractor(func(block notion.Block) (string, error) {
+// getJSONPath returns the value found at the specified path *within*
+// the entity wrapped by this block.
+// For example, if this is a paragraph block:
+//
+//	{
+//	 "type": "paragraph",
+//	 //...other keys excluded
+//	 "paragraph": {
+//	 //...other keys excluded
+//	 }
+//	}
+//
+// then the function will be looking for `path` in `paragraph`.
+func getJSONPath(block notion.Block, path string) (gjson.Result, error) {
 	bytes, err := json.Marshal(block)
 	if err != nil {
-		return "", fmt.Errorf("failed marshalling into JSON: %w", err)
+		return gjson.Result{}, fmt.Errorf("failed marshalling into JSON: %w", err)
 	}
-	return gjson.Get(string(bytes), block.GetType().String()+".title").Str, nil
+	return gjson.Get(string(bytes), block.GetType().String()+path), nil
+}
+
+var titleExtractor = extractor(func(block notion.Block) (string, error) {
+	title, err := getJSONPath(block, ".title")
+	if err != nil {
+		return "", err
+	}
+	return title.Str, nil
 })
 
 var plainTextExtractor = extractor(func(block notion.Block) (string, error) {
-	bytes, err := json.Marshal(block)
+	richTexts, err := getJSONPath(block, ".rich_text")
 	if err != nil {
-		return "", fmt.Errorf("failed marshalling into JSON: %w", err)
+		return "", err
 	}
-	richTexts := gjson.Get(string(bytes), block.GetType().String()+".rich_text")
 	var result string
 	for _, rt := range richTexts.Array() {
 		result += rt.Get("plain_text").Str
@@ -50,15 +70,17 @@ var plainTextExtractor = extractor(func(block notion.Block) (string, error) {
 })
 
 var urlExtractor = extractor(func(block notion.Block) (string, error) {
-	bytes, err := json.Marshal(block)
+	url, err := getJSONPath(block, ".url")
 	if err != nil {
-		return "", fmt.Errorf("failed marshalling into JSON: %w", err)
+		return "", err
 	}
 
-	var elems []string
-	elems = append(elems, gjson.Get(string(bytes), block.GetType().String()+".url").Str)
+	elems := []string{url.Str}
 
-	captions := gjson.Get(string(bytes), block.GetType().String()+".caption")
+	captions, err := getJSONPath(block, ".caption")
+	if err != nil {
+		return "", err
+	}
 	for _, rt := range captions.Array() {
 		elems = append(elems, rt.Get("plain_text").Str)
 	}
@@ -67,21 +89,24 @@ var urlExtractor = extractor(func(block notion.Block) (string, error) {
 })
 
 var fileExtractor = extractor(func(block notion.Block) (string, error) {
-	bytes, err := json.Marshal(block)
+	notionFileURL, err := getJSONPath(block, ".file.url")
 	if err != nil {
-		return "", fmt.Errorf("failed marshalling into JSON: %w", err)
+		return "", fmt.Errorf("failed getting JSON path %v: %w", ".file.url", err)
 	}
-	notionFileURL := gjson.Get(string(bytes), block.GetType().String()+".file.url").Str
-	externalURL := gjson.Get(string(bytes), block.GetType().String()+".external.url").Str
-	return strings.Join([]string{notionFileURL, externalURL}, " "), nil
+
+	externalURL, err := getJSONPath(block, ".external.url")
+	if err != nil {
+		return "", err
+	}
+	return strings.Join([]string{notionFileURL.Str, externalURL.Str}, " "), nil
 })
 
 var equationExtractor = extractor(func(block notion.Block) (string, error) {
-	bytes, err := json.Marshal(block)
+	expression, err := getJSONPath(block, ".expression")
 	if err != nil {
-		return "", fmt.Errorf("failed marshalling into JSON: %w", err)
+		return "", err
 	}
-	return gjson.Get(string(bytes), block.GetType().String()+".expression").Str, nil
+	return expression.Str, nil
 })
 
 var extractors = map[string]extractor{

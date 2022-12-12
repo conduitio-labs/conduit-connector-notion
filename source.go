@@ -289,8 +289,7 @@ func (s *Source) getPayload(ctx context.Context, children notion.Blocks) (sdk.Ra
 		if err != nil {
 			return nil, err
 		}
-		payload += text
-		payload += "\n"
+		payload += text + "\n"
 	}
 
 	return sdk.RawData(payload), nil
