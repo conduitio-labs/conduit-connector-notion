@@ -17,9 +17,10 @@ package notion
 import (
 	"errors"
 	"fmt"
-	"github.com/matryer/is"
 	"testing"
 	"time"
+
+	"github.com/matryer/is"
 )
 
 func TestConfig(t *testing.T) {
