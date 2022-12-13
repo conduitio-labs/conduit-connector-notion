@@ -12,18 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package notion_test
+package notion
 
 import (
 	"context"
 	"strings"
 	"testing"
-
-	notion "github.com/conduitio-labs/conduit-connector-notion"
 )
 
 func TestConfigureSource_FailsWhenConfigEmpty(t *testing.T) {
-	con := notion.Source{}
+	con := NewSource()
 	err := con.Configure(context.Background(), make(map[string]string))
 	if err == nil {
 		t.Error("expected error for missing config params")
@@ -35,7 +33,7 @@ func TestConfigureSource_FailsWhenConfigEmpty(t *testing.T) {
 }
 
 func TestTeardownSource_NoOpen(t *testing.T) {
-	con := notion.NewSource()
+	con := NewSource()
 	err := con.Teardown(context.Background())
 	if err != nil {
 		t.Errorf("expected no error, got %v", err)

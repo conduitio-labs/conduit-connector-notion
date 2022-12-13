@@ -1,0 +1,69 @@
+{
+  "object": "block",
+  "id": "64b74001-739d-4e29-a6e9-d81f79bb0877",
+  "type": "paragraph",
+  "created_time": "2022-12-09T16:52:00Z",
+  "last_edited_time": "2022-12-09T16:55:00Z",
+  "created_by": {
+    "object": "user",
+    "id": "9f0964c0-d4d5-4943-abf4-773ee8f86dbc"
+  },
+  "last_edited_by": {
+    "object": "user",
+    "id": "9f0964c0-d4d5-4943-abf4-773ee8f86dbc"
+  },
+  "paragraph": {
+    "rich_text": [
+      {
+        "type": "text",
+        "text": {
+          "content": "A paragraph with a link to "
+        },
+        "annotations": {
+          "bold": false,
+          "italic": false,
+          "strikethrough": false,
+          "underline": false,
+          "code": false,
+          "color": "default"
+        },
+        "plain_text": "A paragraph with a link to "
+      },
+      {
+        "type": "text",
+        "text": {
+          "content": "Conduit’s website",
+          "link": {
+            "url": "https://conduit.io"
+          }
+        },
+        "annotations": {
+          "bold": false,
+          "italic": false,
+          "strikethrough": false,
+          "underline": false,
+          "code": false,
+          "color": "default"
+        },
+        "plain_text": "Conduit’s website",
+        "href": "https://conduit.io"
+      },
+      {
+        "type": "text",
+        "text": {
+          "content": "."
+        },
+        "annotations": {
+          "bold": false,
+          "italic": false,
+          "strikethrough": false,
+          "underline": false,
+          "code": false,
+          "color": "default"
+        },
+        "plain_text": "."
+      }
+    ],
+    "color": "default"
+  }
+}
