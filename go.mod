@@ -4,7 +4,6 @@ go 1.19
 
 require (
 	github.com/conduitio/conduit-connector-sdk v0.2.0
-	github.com/google/uuid v1.1.2
 	github.com/jomei/notionapi v1.9.3
 )
 
