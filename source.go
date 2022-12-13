@@ -32,11 +32,11 @@ type Source struct {
 	client         *notion.Client
 	lastEditedTime time.Time
 	fetchIDs       []string
-	firstFetch     bool
+	lastFetch      time.Time
 }
 
 func NewSource() sdk.Source {
-	return &Source{firstFetch: true}
+	return &Source{}
 }
 
 func (s *Source) Parameters() map[string]sdk.Parameter {
@@ -120,11 +120,14 @@ func (s *Source) nextObject(ctx context.Context) (sdk.Record, error) {
 		return sdk.Record{}, fmt.Errorf("failed fetching blocks for %v: %w", id, err)
 	}
 
+	// Transform the block and all of its children
+	// into a Conduit record.
 	record, err := s.blockToRecord(ctx, block, children)
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed transforming block %v to record: %w", id, err)
 	}
-	s.lastEditedTime = *block.GetLastEditedTime()
+
+	s.savePosition(*block.GetLastEditedTime())
 	return record, nil
 }
 
@@ -186,13 +189,13 @@ func (s *Source) populateIDs(ctx context.Context) error {
 		return nil
 	}
 	// the first read attempt (when the connector starts)
-	if !s.firstFetch {
+	if !s.lastFetch.IsZero() {
 		sdk.Logger(ctx).Debug().
 			Dur("poll_interval", s.config.pollInterval).
 			Msg("sleeping before checking for changes")
 		time.Sleep(s.config.pollInterval)
 	}
-	s.firstFetch = false
+	s.lastFetch = time.Now()
 
 	sdk.Logger(ctx).Debug().Msg("populating IDs")
 	fetch := true
@@ -262,7 +265,7 @@ func (s *Source) blockToRecord(ctx context.Context, parent notion.Block, childre
 	}
 
 	return sdk.Record{
-		Position:  s.getPosition(parent),
+		Position:  s.getPosition(),
 		Metadata:  nil,
 		CreatedAt: time.Now(),
 		Key:       sdk.RawData(parent.GetID().String()),
@@ -270,9 +273,9 @@ func (s *Source) blockToRecord(ctx context.Context, parent notion.Block, childre
 	}, nil
 }
 
-func (s *Source) getPosition(b notion.Block) sdk.Position {
+func (s *Source) getPosition() sdk.Position {
 	return sdk.Position(
-		strconv.FormatInt(b.GetLastEditedTime().Unix(), 10),
+		strconv.FormatInt(s.lastEditedTime.Unix(), 10),
 	)
 }
 
@@ -293,4 +296,19 @@ func (s *Source) getPayload(ctx context.Context, children notion.Blocks) (sdk.Ra
 	}
 
 	return sdk.RawData(payload), nil
+}
+
+// savePosition saves the position, if it's safe to do so.
+func (s *Source) savePosition(lastEditedTime time.Time) {
+	// The precision of a page's last_edited_time field is in minutes.
+	// Hence, to save it as a position (from which we can safely resume
+	// reading new records), we need to be sure that all pages from
+	// that minute have been read.
+
+	// todo instead of check the queue of IDs to fetch
+	// we can check the respective pages' last_edited_times
+	// and make sure nothing is left from lastEditedTime's minute.
+	if lastEditedTime.Before(s.lastFetch) && len(s.fetchIDs) == 0 {
+		s.lastEditedTime = lastEditedTime
+	}
 }
