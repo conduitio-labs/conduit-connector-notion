@@ -120,8 +120,10 @@ func (s *Source) nextObject(ctx context.Context) (sdk.Record, error) {
 			sdk.Logger(ctx).Debug().
 				Str("block_id", id).
 				Msg("not found or not accessible to the integration")
+
 			return s.nextObject(ctx)
 		}
+
 		return sdk.Record{}, fmt.Errorf("failed fetching block %v: %w", id, err)
 	}
 
@@ -135,6 +137,7 @@ func (s *Source) nextObject(ctx context.Context) (sdk.Record, error) {
 		return sdk.Record{}, fmt.Errorf("failed transforming block %v to record: %w", id, err)
 	}
 	s.lastEditedTime = *block.GetLastEditedTime()
+
 	return record, nil
 }
 
