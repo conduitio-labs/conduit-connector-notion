@@ -5,10 +5,3 @@ build:
 
 test:
 	go test $(GOTEST_FLAGS) -v -race ./...
-
-test-integration:
-	# run required docker containers, execute integration tests, stop containers after tests
-	docker compose -f test/docker-compose.yml up -d
-	go test $(GOTEST_FLAGS) -v -race ./...; ret=$$?; \
-		docker compose -f test/docker-compose.yml down; \
-		exit $$ret

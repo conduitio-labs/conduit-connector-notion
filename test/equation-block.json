@@ -1,0 +1,18 @@
+{
+  "object": "block",
+  "id": "12f92899-08c6-4aa2-981f-c23a2f0ad4ac",
+  "type": "equation",
+  "created_time": "2022-12-09T14:12:00Z",
+  "last_edited_time": "2022-12-09T14:13:00Z",
+  "created_by": {
+    "object": "user",
+    "id": "9f0964c0-d4d5-4943-abf4-773ee8f86dbc"
+  },
+  "last_edited_by": {
+    "object": "user",
+    "id": "9f0964c0-d4d5-4943-abf4-773ee8f86dbc"
+  },
+  "equation": {
+    "expression": "|x| = 1"
+  }
+}
