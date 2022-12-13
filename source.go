@@ -116,10 +116,14 @@ func (s *Source) nextObject(ctx context.Context) (sdk.Record, error) {
 	// fetch the block and then all of its children
 	block, err := s.client.Block.Get(ctx, notion.BlockID(id))
 	if err != nil {
+		// The search endpoint that we use to list all the pages
+		// can return stale results.
+		// It's also possible that a page has been deleted after
+		// we got the ID but before we actually read the whole page.
 		if s.notFound(err) {
 			sdk.Logger(ctx).Debug().
 				Str("block_id", id).
-				Msg("not found or not accessible to the integration")
+				Msg("the resource does not exist or the resource has not been shared with owner of the token")
 
 			return s.nextObject(ctx)
 		}
