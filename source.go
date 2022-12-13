@@ -26,6 +26,11 @@ import (
 	notion "github.com/jomei/notionapi"
 )
 
+type recordPayload struct {
+	Plaintext string            `json:"plaintext"`
+	Metadata  map[string]string `json:"metadata"`
+}
+
 type Source struct {
 	sdk.UnimplementedSource
 
@@ -251,14 +256,14 @@ func (s *Source) getPages(ctx context.Context, cursor notion.Cursor) (*notion.Se
 }
 
 func (s *Source) pageToRecord(ctx context.Context, page *notion.Page, children notion.Blocks) (sdk.Record, error) {
-	payload, err := s.getPayload(ctx, children)
+	payload, err := s.getPayload(ctx, children, s.getMetadata(page))
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed getting payload: %w", err)
 	}
 
 	return sdk.Record{
 		Position:  s.getPosition(page),
-		Metadata:  s.getMetadata(page),
+		Metadata:  nil,
 		CreatedAt: time.Now(),
 		Key:       sdk.RawData(page.ID),
 		Payload:   payload,
@@ -271,8 +276,12 @@ func (s *Source) getPosition(page *notion.Page) sdk.Position {
 	)
 }
 
-func (s *Source) getPayload(ctx context.Context, children notion.Blocks) (sdk.RawData, error) {
-	var payload string
+func (s *Source) getPayload(
+	ctx context.Context,
+	children notion.Blocks,
+	metadata map[string]string,
+) (sdk.RawData, error) {
+	var plainText string
 	for _, c := range children {
 		text, err := extractText(c)
 		if errors.Is(err, errNoExtractor) {
@@ -284,10 +293,14 @@ func (s *Source) getPayload(ctx context.Context, children notion.Blocks) (sdk.Ra
 		if err != nil {
 			return nil, err
 		}
-		payload += text + "\n"
+		plainText += text + "\n"
 	}
 
-	return sdk.RawData(payload), nil
+	payload := recordPayload{
+		Plaintext: plainText,
+		Metadata:  metadata,
+	}
+	return json.Marshal(payload)
 }
 
 func (s *Source) getMetadata(page *notion.Page) map[string]string {
