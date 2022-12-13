@@ -12,32 +12,50 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package notion_test
+package notion
 
 import (
 	"context"
-	"strings"
+	"errors"
+	"github.com/matryer/is"
 	"testing"
-
-	notion "github.com/conduitio-labs/conduit-connector-notion"
+	"time"
 )
 
-func TestConfigureSource_FailsWhenConfigEmpty(t *testing.T) {
-	con := notion.Source{}
-	err := con.Configure(context.Background(), make(map[string]string))
-	if err == nil {
-		t.Error("expected error for missing config params")
-	}
+func TestSource_Config_FailsWhenEmpty(t *testing.T) {
+	is := is.New(t)
+	underTest := NewSource()
+	err := underTest.Configure(context.Background(), make(map[string]string))
 
-	if strings.HasPrefix(err.Error(), "config is invalid:") {
-		t.Errorf("expected error to be about missing config, got %v", err)
-	}
+	is.True(errors.Is(err, ErrRequiredParamMissing))
 }
 
-func TestTeardownSource_NoOpen(t *testing.T) {
-	con := notion.NewSource()
-	err := con.Teardown(context.Background())
-	if err != nil {
-		t.Errorf("expected no error, got %v", err)
+func TestSource_Teardown_NoOpen(t *testing.T) {
+	is := is.New(t)
+	underTest := NewSource()
+	err := underTest.Teardown(context.Background())
+	is.NoErr(err)
+}
+
+func TestSource_Open_NilPosition(t *testing.T) {
+	is := is.New(t)
+	underTest := NewSource().(*Source)
+	err := underTest.Open(context.Background(), nil)
+	is.NoErr(err)
+	is.True(underTest.lastEditedTime.IsZero())
+}
+
+func TestSource_Open_WithPosition(t *testing.T) {
+	is := is.New(t)
+	underTest := NewSource().(*Source)
+	pos := position{
+		ID:             "test-id",
+		LastEditedTime: time.Now(),
 	}
+	sdkPos, err := pos.toSDKPosition()
+	is.NoErr(err)
+
+	err = underTest.Open(context.Background(), sdkPos)
+	is.NoErr(err)
+	is.True(pos.LastEditedTime.Equal(underTest.lastEditedTime))
 }
