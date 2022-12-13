@@ -26,6 +26,19 @@ import (
 	notion "github.com/jomei/notionapi"
 )
 
+type position struct {
+	ID             string
+	LastEditedTime time.Time
+}
+
+func (p position) toSDKPosition() (sdk.Position, error) {
+	bytes, err := json.Marshal(p)
+	if err != nil {
+		return nil, fmt.Errorf("failed marshalling position: %w", err)
+	}
+	return bytes, nil
+}
+
 type recordPayload struct {
 	Plaintext string            `json:"plaintext"`
 	Metadata  map[string]string `json:"metadata"`
@@ -80,15 +93,17 @@ func (s *Source) Open(_ context.Context, pos sdk.Position) error {
 	return err
 }
 
-func (s *Source) initPosition(pos sdk.Position) error {
-	if len(pos) == 0 {
+func (s *Source) initPosition(sdkPos sdk.Position) error {
+	if len(sdkPos) == 0 {
 		return nil
 	}
-	posParsed, err := time.Parse(string(pos), time.RFC3339)
+
+	pos, err := s.fromSDKPosition(sdkPos)
 	if err != nil {
-		return fmt.Errorf("failed parsing time string %v: %w", string(pos), err)
+		return err
 	}
-	s.lastEditedTime = posParsed
+	s.lastEditedTime = pos.LastEditedTime
+
 	return nil
 }
 
@@ -261,8 +276,12 @@ func (s *Source) pageToRecord(ctx context.Context, page *notion.Page, children n
 		return sdk.Record{}, fmt.Errorf("failed getting payload: %w", err)
 	}
 
+	pos, err := s.getPosition(page)
+	if err != nil {
+		return sdk.Record{}, err
+	}
 	return sdk.Record{
-		Position:  s.getPosition(page),
+		Position:  pos,
 		Metadata:  nil,
 		CreatedAt: time.Now(),
 		Key:       sdk.RawData(page.ID),
@@ -270,10 +289,23 @@ func (s *Source) pageToRecord(ctx context.Context, page *notion.Page, children n
 	}, nil
 }
 
-func (s *Source) getPosition(page *notion.Page) sdk.Position {
-	return sdk.Position(
-		strconv.FormatInt(page.LastEditedTime.Unix(), 10),
-	)
+func (s *Source) getPosition(page *notion.Page) (sdk.Position, error) {
+	if page == nil {
+		return nil, nil
+	}
+	return position{
+		ID:             page.ID.String(),
+		LastEditedTime: page.LastEditedTime,
+	}.toSDKPosition()
+}
+
+func (s *Source) fromSDKPosition(sdkPos sdk.Position) (position, error) {
+	pos := position{}
+	err := json.Unmarshal(sdkPos, &pos)
+	if err != nil {
+		return position{}, fmt.Errorf("failed unmarshalling position: %w", err)
+	}
+	return pos, nil
 }
 
 func (s *Source) getPayload(
