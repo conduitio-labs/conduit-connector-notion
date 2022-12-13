@@ -1,0 +1,35 @@
+{
+  "object": "block",
+  "id": "f71f5afe-4f4c-410a-a4dc-458a7b96c78b",
+  "type": "numbered_list_item",
+  "created_time": "2022-12-12T09:55:00Z",
+  "last_edited_time": "2022-12-12T09:55:00Z",
+  "created_by": {
+    "object": "user",
+    "id": "9f0964c0-d4d5-4943-abf4-773ee8f86dbc"
+  },
+  "last_edited_by": {
+    "object": "user",
+    "id": "9f0964c0-d4d5-4943-abf4-773ee8f86dbc"
+  },
+  "numbered_list_item": {
+    "rich_text": [
+      {
+        "type": "text",
+        "text": {
+          "content": "Numbered item 2"
+        },
+        "annotations": {
+          "bold": false,
+          "italic": false,
+          "strikethrough": false,
+          "underline": false,
+          "code": false,
+          "color": "default"
+        },
+        "plain_text": "Numbered item 2"
+      }
+    ],
+    "color": "default"
+  }
+}

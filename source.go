@@ -38,11 +38,6 @@ func (p position) toSDKPosition() (sdk.Position, error) {
 	return bytes, nil
 }
 
-type recordPayload struct {
-	BlockType string         `json:"type"`
-	Children  []notion.Block `json:"children"`
-}
-
 type Source struct {
 	sdk.UnimplementedSource
 
@@ -140,7 +135,7 @@ func (s *Source) nextObject(ctx context.Context) (sdk.Record, error) {
 		return sdk.Record{}, fmt.Errorf("failed fetching blocks for %v: %w", id, err)
 	}
 
-	record, err := s.blockToRecord(block, children)
+	record, err := s.blockToRecord(ctx, block, children)
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed transforming block %v to record: %w", id, err)
 	}
@@ -275,8 +270,8 @@ func (s *Source) getPages(ctx context.Context, cursor notion.Cursor) (*notion.Se
 	return s.client.Search.Do(ctx, req)
 }
 
-func (s *Source) blockToRecord(parent notion.Block, children notion.Blocks) (sdk.Record, error) {
-	payload, err := s.getPayload(parent, children)
+func (s *Source) blockToRecord(ctx context.Context, parent notion.Block, children notion.Blocks) (sdk.Record, error) {
+	payload, err := s.getPayload(ctx, children)
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed getting payload: %w", err)
 	}
@@ -310,10 +305,21 @@ func (s *Source) fromSDKPosition(sdkPos sdk.Position) (position, error) {
 	return pos, nil
 }
 
-func (s *Source) getPayload(parent notion.Block, children notion.Blocks) (sdk.RawData, error) {
-	nb := recordPayload{
-		BlockType: parent.GetType().String(),
-		Children:  children,
+func (s *Source) getPayload(ctx context.Context, children notion.Blocks) (sdk.RawData, error) {
+	var payload string
+	for _, c := range children {
+		text, err := extractText(c)
+		if errors.Is(err, errNoExtractor) {
+			sdk.Logger(ctx).Warn().
+				Str("block_type", c.GetType().String()).
+				Msg("no text extractor registered")
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		payload += text + "\n"
 	}
-	return json.Marshal(nb)
+
+	return sdk.RawData(payload), nil
 }
