@@ -16,6 +16,7 @@ package notion
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -24,6 +25,11 @@ import (
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	notion "github.com/jomei/notionapi"
 )
+
+type recordPayload struct {
+	Plaintext string            `json:"plaintext"`
+	Metadata  map[string]string `json:"metadata"`
+}
 
 type Source struct {
 	sdk.UnimplementedSource
@@ -95,10 +101,10 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 		return sdk.Record{}, sdk.ErrBackoffRetry
 	}
 
-	return s.nextObject(ctx)
+	return s.nextPage(ctx)
 }
 
-func (s *Source) nextObject(ctx context.Context) (sdk.Record, error) {
+func (s *Source) nextPage(ctx context.Context) (sdk.Record, error) {
 	if len(s.fetchIDs) == 0 {
 		return sdk.Record{}, errors.New("no page IDs available")
 	}
@@ -106,44 +112,38 @@ func (s *Source) nextObject(ctx context.Context) (sdk.Record, error) {
 	s.fetchIDs = s.fetchIDs[1:]
 
 	sdk.Logger(ctx).Debug().
-		Str("block_id", id).
-		Msg("fetching block")
+		Str("page_id", id).
+		Msg("fetching page")
 
-	// fetch the block and then all of its children
-	block, err := s.client.Block.Get(ctx, notion.BlockID(id))
+	// fetch the page and then all of its children
+	page, err := s.client.Page.Get(ctx, notion.PageID(id))
 	if err != nil {
-		return sdk.Record{}, fmt.Errorf("failed fetching block %v: %w", id, err)
+		return sdk.Record{}, fmt.Errorf("failed fetching page %v: %w", id, err)
 	}
 
-	children, err := s.getChildren(ctx, block)
+	children, err := s.getChildren(ctx, id)
 	if err != nil {
-		return sdk.Record{}, fmt.Errorf("failed fetching blocks for %v: %w", id, err)
+		return sdk.Record{}, fmt.Errorf("failed fetching content for %v: %w", id, err)
 	}
 
-	record, err := s.blockToRecord(ctx, block, children)
+	record, err := s.pageToRecord(ctx, page, children)
 	if err != nil {
-		return sdk.Record{}, fmt.Errorf("failed transforming block %v to record: %w", id, err)
+		return sdk.Record{}, fmt.Errorf("failed transforming page %v to record: %w", id, err)
 	}
-	s.lastEditedTime = *block.GetLastEditedTime()
+	s.lastEditedTime = page.LastEditedTime
 	return record, nil
 }
 
 // getChildren gets all the child and grand-child blocks of the input block
-func (s *Source) getChildren(ctx context.Context, block notion.Block) ([]notion.Block, error) {
+func (s *Source) getChildren(ctx context.Context, blockID string) ([]notion.Block, error) {
 	var children []notion.Block
-	if !block.GetHasChildren() {
-		sdk.Logger(ctx).Debug().
-			Str("block_id", block.GetID().String()).
-			Msg("block has no children")
-		return children, nil
-	}
 
 	fetch := true
 	var cursor notion.Cursor
 	for fetch {
 		resp, err := s.client.Block.GetChildren(
 			ctx,
-			block.GetID(),
+			notion.BlockID(blockID),
 			&notion.Pagination{
 				StartCursor: cursor,
 			},
@@ -151,7 +151,7 @@ func (s *Source) getChildren(ctx context.Context, block notion.Block) ([]notion.
 		if err != nil {
 			return nil, fmt.Errorf(
 				"failed getting children for block ID %v, cursor %v: %w",
-				block.GetID(),
+				blockID,
 				cursor,
 				err,
 			)
@@ -160,7 +160,7 @@ func (s *Source) getChildren(ctx context.Context, block notion.Block) ([]notion.
 		// get grandchildren as well
 		for _, child := range resp.Results {
 			children = append(children, child)
-			grandChildren, err := s.getChildren(ctx, child)
+			grandChildren, err := s.getChildren(ctx, child.GetID().String())
 			if err != nil {
 				return nil, err
 			}
@@ -255,29 +255,33 @@ func (s *Source) getPages(ctx context.Context, cursor notion.Cursor) (*notion.Se
 	return s.client.Search.Do(ctx, req)
 }
 
-func (s *Source) blockToRecord(ctx context.Context, parent notion.Block, children notion.Blocks) (sdk.Record, error) {
-	payload, err := s.getPayload(ctx, children)
+func (s *Source) pageToRecord(ctx context.Context, page *notion.Page, children notion.Blocks) (sdk.Record, error) {
+	payload, err := s.getPayload(ctx, children, s.getMetadata(page))
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed getting payload: %w", err)
 	}
 
 	return sdk.Record{
-		Position:  s.getPosition(parent),
+		Position:  s.getPosition(page),
 		Metadata:  nil,
 		CreatedAt: time.Now(),
-		Key:       sdk.RawData(parent.GetID().String()),
+		Key:       sdk.RawData(page.ID),
 		Payload:   payload,
 	}, nil
 }
 
-func (s *Source) getPosition(b notion.Block) sdk.Position {
+func (s *Source) getPosition(page *notion.Page) sdk.Position {
 	return sdk.Position(
-		strconv.FormatInt(b.GetLastEditedTime().Unix(), 10),
+		strconv.FormatInt(page.LastEditedTime.Unix(), 10),
 	)
 }
 
-func (s *Source) getPayload(ctx context.Context, children notion.Blocks) (sdk.RawData, error) {
-	var payload string
+func (s *Source) getPayload(
+	ctx context.Context,
+	children notion.Blocks,
+	metadata map[string]string,
+) (sdk.RawData, error) {
+	var plainText string
 	for _, c := range children {
 		text, err := extractText(c)
 		if errors.Is(err, errNoExtractor) {
@@ -289,8 +293,50 @@ func (s *Source) getPayload(ctx context.Context, children notion.Blocks) (sdk.Ra
 		if err != nil {
 			return nil, err
 		}
-		payload += text + "\n"
+		plainText += text + "\n"
 	}
 
-	return sdk.RawData(payload), nil
+	payload := recordPayload{
+		Plaintext: plainText,
+		Metadata:  metadata,
+	}
+	return json.Marshal(payload)
+}
+
+func (s *Source) getMetadata(page *notion.Page) map[string]string {
+	return map[string]string{
+		"notion.title":          s.getPageTitle(page),
+		"notion.url":            page.URL,
+		"notion.createdTime":    page.CreatedTime.Format(time.RFC3339),
+		"notion.lastEditedTime": page.LastEditedTime.Format(time.RFC3339),
+		"notion.createdBy":      s.toJSON(page.CreatedBy),
+		"notion.lastEditedBy":   s.toJSON(page.LastEditedBy),
+		"notion.archived":       strconv.FormatBool(page.Archived),
+		"notion.parent":         s.toJSON(page.Parent),
+	}
+}
+
+// toJSON converts `v` into a JSON string.
+// In case that's not possible, the function returns an empty string.
+func (s *Source) toJSON(v any) string {
+	bytes, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	return string(bytes)
+}
+
+// getPageTitle returns the input page's title.
+// In case that's not possible, the function returns an empty string.
+func (s *Source) getPageTitle(page *notion.Page) string {
+	if page == nil || len(page.Properties) == 0 {
+		return ""
+	}
+
+	tp, ok := page.Properties["title"].(*notion.TitleProperty)
+	if !ok || len(tp.Title) == 0 {
+		return ""
+	}
+
+	return tp.Title[0].PlainText
 }
