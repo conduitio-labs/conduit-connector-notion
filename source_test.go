@@ -17,9 +17,10 @@ package notion
 import (
 	"context"
 	"errors"
-	"github.com/matryer/is"
 	"testing"
 	"time"
+
+	"github.com/matryer/is"
 )
 
 func TestSource_Config_FailsWhenEmpty(t *testing.T) {
