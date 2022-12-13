@@ -137,7 +137,7 @@ func (s *Source) nextPage(ctx context.Context) (sdk.Record, error) {
 		// It's also possible that a page has been deleted after
 		// we got the ID but before we actually read the whole page.
 		if s.notFound(err) {
-			sdk.Logger(ctx).Debug().
+			sdk.Logger(ctx).Info().
 				Str("block_id", id).
 				Msg("the resource does not exist or the resource has not been shared with owner of the token")
 
