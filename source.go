@@ -17,7 +17,6 @@ package notion
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -98,17 +97,15 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed fetching page IDs: %w", err)
 	}
-	if len(s.fetchIDs) == 0 {
-		return sdk.Record{}, sdk.ErrBackoffRetry
-	}
 
 	return s.nextObject(ctx)
 }
 
 func (s *Source) nextObject(ctx context.Context) (sdk.Record, error) {
 	if len(s.fetchIDs) == 0 {
-		return sdk.Record{}, errors.New("no page IDs available")
+		return sdk.Record{}, sdk.ErrBackoffRetry
 	}
+
 	id := s.fetchIDs[0]
 	s.fetchIDs = s.fetchIDs[1:]
 
