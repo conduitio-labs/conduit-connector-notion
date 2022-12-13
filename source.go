@@ -24,7 +24,6 @@ import (
 	"time"
 
 	sdk "github.com/conduitio/conduit-connector-sdk"
-	"github.com/google/uuid"
 	notion "github.com/jomei/notionapi"
 )
 
@@ -221,8 +220,6 @@ func (s *Source) populateIDs(ctx context.Context) error {
 		fetch = results.HasMore
 		cursor = results.NextCursor
 	}
-
-	s.fetchIDs = append(s.fetchIDs, uuid.New().String())
 
 	sdk.Logger(ctx).Info().Msgf("fetched %v IDs", len(s.fetchIDs))
 	return nil
