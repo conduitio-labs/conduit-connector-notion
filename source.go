@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"time"
 
@@ -112,17 +113,15 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed fetching page IDs: %w", err)
 	}
-	if len(s.fetchIDs) == 0 {
-		return sdk.Record{}, sdk.ErrBackoffRetry
-	}
 
 	return s.nextPage(ctx)
 }
 
 func (s *Source) nextPage(ctx context.Context) (sdk.Record, error) {
 	if len(s.fetchIDs) == 0 {
-		return sdk.Record{}, errors.New("no page IDs available")
+		return sdk.Record{}, sdk.ErrBackoffRetry
 	}
+
 	id := s.fetchIDs[0]
 	s.fetchIDs = s.fetchIDs[1:]
 
@@ -133,6 +132,18 @@ func (s *Source) nextPage(ctx context.Context) (sdk.Record, error) {
 	// fetch the page and then all of its children
 	page, err := s.client.Page.Get(ctx, notion.PageID(id))
 	if err != nil {
+		// The search endpoint that we use to list all the pages
+		// can return stale results.
+		// It's also possible that a page has been deleted after
+		// we got the ID but before we actually read the whole page.
+		if s.notFound(err) {
+			sdk.Logger(ctx).Info().
+				Str("block_id", id).
+				Msg("the resource does not exist or the resource has not been shared with owner of the token")
+
+			return s.nextPage(ctx)
+		}
+
 		return sdk.Record{}, fmt.Errorf("failed fetching page %v: %w", id, err)
 	}
 
@@ -145,7 +156,9 @@ func (s *Source) nextPage(ctx context.Context) (sdk.Record, error) {
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed transforming page %v to record: %w", id, err)
 	}
+
 	s.lastEditedTime = page.LastEditedTime
+
 	return record, nil
 }
 
@@ -371,4 +384,12 @@ func (s *Source) getPageTitle(page *notion.Page) string {
 	}
 
 	return tp.Title[0].PlainText
+}
+
+func (s *Source) notFound(err error) bool {
+	nErr, ok := err.(*notion.Error)
+	if !ok {
+		return false
+	}
+	return nErr.Status == http.StatusNotFound
 }
