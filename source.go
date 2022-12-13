@@ -19,10 +19,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strconv"
 	"time"
 
 	sdk "github.com/conduitio/conduit-connector-sdk"
+	"github.com/google/uuid"
 	notion "github.com/jomei/notionapi"
 )
 
@@ -118,6 +120,12 @@ func (s *Source) nextObject(ctx context.Context) (sdk.Record, error) {
 	// fetch the block and then all of its children
 	block, err := s.client.Block.Get(ctx, notion.BlockID(id))
 	if err != nil {
+		if s.notFound(err) {
+			sdk.Logger(ctx).Debug().
+				Str("block_id", id).
+				Msg("not found or not accessible to the integration")
+			return s.nextObject(ctx)
+		}
 		return sdk.Record{}, fmt.Errorf("failed fetching block %v: %w", id, err)
 	}
 
@@ -214,6 +222,8 @@ func (s *Source) populateIDs(ctx context.Context) error {
 		cursor = results.NextCursor
 	}
 
+	s.fetchIDs = append(s.fetchIDs, uuid.New().String())
+
 	sdk.Logger(ctx).Info().Msgf("fetched %v IDs", len(s.fetchIDs))
 	return nil
 }
@@ -288,4 +298,12 @@ func (s *Source) getPayload(parent notion.Block, children notion.Blocks) (sdk.Ra
 		Children:  children,
 	}
 	return json.Marshal(nb)
+}
+
+func (s *Source) notFound(err error) bool {
+	nErr, ok := err.(*notion.Error)
+	if !ok {
+		return false
+	}
+	return nErr.Status == http.StatusNotFound
 }
