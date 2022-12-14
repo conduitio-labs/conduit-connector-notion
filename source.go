@@ -23,8 +23,8 @@ import (
 	"strconv"
 	"time"
 
+	notion "github.com/conduitio-labs/notionapi"
 	sdk "github.com/conduitio/conduit-connector-sdk"
-	notion "github.com/jomei/notionapi"
 )
 
 type position struct {
