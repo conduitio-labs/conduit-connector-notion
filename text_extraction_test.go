@@ -19,7 +19,7 @@ import (
 	"os"
 	"testing"
 
-	notion "github.com/jomei/notionapi"
+	notion "github.com/conduitio-labs/notionapi"
 	"github.com/matryer/is"
 )
 
