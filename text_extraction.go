@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"strings"
 
-	notion "github.com/jomei/notionapi"
+	notion "github.com/conduitio-labs/notionapi"
 	"github.com/tidwall/gjson"
 )
 
