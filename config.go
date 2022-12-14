@@ -29,7 +29,6 @@ const (
 var Required = []string{Token}
 
 var (
-	ErrEmptyConfig          = errors.New("missing or empty config")
 	ErrRequiredParamMissing = errors.New("required parameter missing")
 )
 
