@@ -158,6 +158,11 @@ func (s *Source) nextPage(ctx context.Context) (sdk.Record, error) {
 	}
 
 	s.savePosition(page.LastEditedTime)
+	pos, err := s.getPosition(page)
+	if err != nil {
+		return sdk.Record{}, err
+	}
+	record.Position = pos
 	return record, nil
 }
 
@@ -288,12 +293,7 @@ func (s *Source) pageToRecord(ctx context.Context, page *notion.Page, children n
 		return sdk.Record{}, fmt.Errorf("failed getting payload: %w", err)
 	}
 
-	pos, err := s.getPosition(page)
-	if err != nil {
-		return sdk.Record{}, err
-	}
 	return sdk.Record{
-		Position:  pos,
 		Metadata:  nil,
 		CreatedAt: time.Now(),
 		Key:       sdk.RawData(page.ID),
