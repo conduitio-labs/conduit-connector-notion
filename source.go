@@ -48,15 +48,19 @@ type recordPayload struct {
 type Source struct {
 	sdk.UnimplementedSource
 
-	config         Config
-	client         *notion.Client
-	lastEditedTime time.Time
-	fetchIDs       []string
-	firstFetch     bool
+	config Config
+	client *notion.Client
+	// lastMinuteRead is the last minute from which we
+	// processed all pages
+	lastMinuteRead time.Time
+	// fetchIDs contains IDs of pages which need to be fetched
+	fetchIDs []string
+	// lastPoll is the time at which we polled Notion the last time
+	lastPoll time.Time
 }
 
 func NewSource() sdk.Source {
-	return &Source{firstFetch: true}
+	return &Source{}
 }
 
 func (s *Source) Parameters() map[string]sdk.Parameter {
@@ -103,7 +107,7 @@ func (s *Source) initPosition(sdkPos sdk.Position) error {
 	if err != nil {
 		return err
 	}
-	s.lastEditedTime = pos.LastEditedTime
+	s.lastMinuteRead = pos.LastEditedTime
 
 	return nil
 }
@@ -157,8 +161,12 @@ func (s *Source) nextPage(ctx context.Context) (sdk.Record, error) {
 		return sdk.Record{}, fmt.Errorf("failed transforming page %v to record: %w", id, err)
 	}
 
-	s.lastEditedTime = page.LastEditedTime
-
+	s.savePosition(page.LastEditedTime)
+	pos, err := s.getPosition(page)
+	if err != nil {
+		return sdk.Record{}, err
+	}
+	record.Position = pos
 	return record, nil
 }
 
@@ -213,14 +221,15 @@ func (s *Source) populateIDs(ctx context.Context) error {
 	if len(s.fetchIDs) > 0 {
 		return nil
 	}
-	// the first read attempt (when the connector starts)
-	if !s.firstFetch {
+
+	// We don't want to sleep before the first poll attempt
+	if !s.lastPoll.IsZero() {
 		sdk.Logger(ctx).Debug().
 			Dur("poll_interval", s.config.pollInterval).
 			Msg("sleeping before checking for changes")
 		time.Sleep(s.config.pollInterval)
 	}
-	s.firstFetch = false
+	s.lastPoll = time.Now()
 
 	sdk.Logger(ctx).Debug().Msg("populating IDs")
 	fetch := true
@@ -264,7 +273,7 @@ func (s *Source) addToFetchIDs(ctx context.Context, results *notion.SearchRespon
 func (s *Source) hasChanged(page *notion.Page) bool {
 	// see discussion in docs/cdc.md
 	lastTopMinute := time.Now().Truncate(time.Minute)
-	return page.LastEditedTime.After(s.lastEditedTime) &&
+	return page.LastEditedTime.After(s.lastMinuteRead) &&
 		page.LastEditedTime.Before(lastTopMinute)
 }
 
@@ -289,12 +298,7 @@ func (s *Source) pageToRecord(ctx context.Context, page *notion.Page, children n
 		return sdk.Record{}, fmt.Errorf("failed getting payload: %w", err)
 	}
 
-	pos, err := s.getPosition(page)
-	if err != nil {
-		return sdk.Record{}, err
-	}
 	return sdk.Record{
-		Position:  pos,
 		Metadata:  nil,
 		CreatedAt: time.Now(),
 		Key:       sdk.RawData(page.ID),
@@ -308,7 +312,7 @@ func (s *Source) getPosition(page *notion.Page) (sdk.Position, error) {
 	}
 	return position{
 		ID:             page.ID.String(),
-		LastEditedTime: page.LastEditedTime,
+		LastEditedTime: s.lastMinuteRead,
 	}.toSDKPosition()
 }
 
@@ -392,4 +396,19 @@ func (s *Source) notFound(err error) bool {
 		return false
 	}
 	return nErr.Status == http.StatusNotFound
+}
+
+// savePosition saves the position, if it's safe to do so.
+func (s *Source) savePosition(t time.Time) {
+	// The precision of a page's last_edited_time field is in minutes.
+	// Hence, to save it as a position (from which we can safely resume
+	// reading new records), we need to be sure that all pages from
+	// that minute have been read.
+
+	// todo instead of check the queue of IDs to fetch
+	// we can check the respective pages' last_edited_times
+	// and make sure nothing is left from `lastMinuteRead`.
+	if t.Before(s.lastPoll) && len(s.fetchIDs) == 0 {
+		s.lastMinuteRead = t
+	}
 }
