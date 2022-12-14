@@ -217,7 +217,8 @@ func (s *Source) populateIDs(ctx context.Context) error {
 	if len(s.fetchIDs) > 0 {
 		return nil
 	}
-	// the first read attempt (when the connector starts)
+
+	// We don't want to sleep before the first poll attempt
 	if !s.lastFetch.IsZero() {
 		sdk.Logger(ctx).Debug().
 			Dur("poll_interval", s.config.pollInterval).
