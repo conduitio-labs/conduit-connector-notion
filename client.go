@@ -126,7 +126,7 @@ func newDefaultClient() *defaultClient {
 }
 
 func (c *defaultClient) Init(token string) {
-	notion.NewClient(notion.Token(token))
+	c.client = notion.NewClient(notion.Token(token))
 }
 
 func (c *defaultClient) GetPage(ctx context.Context, id string) (page, error) {
