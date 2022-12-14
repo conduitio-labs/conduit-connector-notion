@@ -48,11 +48,15 @@ type recordPayload struct {
 type Source struct {
 	sdk.UnimplementedSource
 
-	config         Config
-	client         *notion.Client
+	config Config
+	client *notion.Client
+	// lastMinuteRead is the last minute from which we
+	// processed all pages
 	lastMinuteRead time.Time
-	fetchIDs       []string
-	lastFetch      time.Time
+	// fetchIDs contains IDs of pages which need to be fetched
+	fetchIDs []string
+	// lastPoll is the time at which we polled Notion the last time
+	lastPoll time.Time
 }
 
 func NewSource() sdk.Source {
@@ -219,13 +223,13 @@ func (s *Source) populateIDs(ctx context.Context) error {
 	}
 
 	// We don't want to sleep before the first poll attempt
-	if !s.lastFetch.IsZero() {
+	if !s.lastPoll.IsZero() {
 		sdk.Logger(ctx).Debug().
 			Dur("poll_interval", s.config.pollInterval).
 			Msg("sleeping before checking for changes")
 		time.Sleep(s.config.pollInterval)
 	}
-	s.lastFetch = time.Now()
+	s.lastPoll = time.Now()
 
 	sdk.Logger(ctx).Debug().Msg("populating IDs")
 	fetch := true
@@ -404,7 +408,7 @@ func (s *Source) savePosition(t time.Time) {
 	// todo instead of check the queue of IDs to fetch
 	// we can check the respective pages' last_edited_times
 	// and make sure nothing is left from `lastMinuteRead`.
-	if t.Before(s.lastFetch) && len(s.fetchIDs) == 0 {
+	if t.Before(s.lastPoll) && len(s.fetchIDs) == 0 {
 		s.lastMinuteRead = t
 	}
 }
