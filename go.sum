@@ -14,8 +14,8 @@ github.com/cncf/xds/go v0.0.0-20210312221358-fbca930ec8ed/go.mod h1:eXthEFrGJvWH
 github.com/cncf/xds/go v0.0.0-20210805033703-aa0b78936158/go.mod h1:eXthEFrGJvWHgFFCl3hGmgk+/aYT6PnTQLykKQRLhEs=
 github.com/cncf/xds/go v0.0.0-20210922020428-25de7278fc84/go.mod h1:eXthEFrGJvWHgFFCl3hGmgk+/aYT6PnTQLykKQRLhEs=
 github.com/cncf/xds/go v0.0.0-20211011173535-cb28da3451f1/go.mod h1:eXthEFrGJvWHgFFCl3hGmgk+/aYT6PnTQLykKQRLhEs=
-github.com/conduitio-labs/notionapi v0.0.0-20221214123948-7eddf0d502e8 h1:k29n71F/EMRmH8BAKvfrIam2v8gY1sf8TQDHOI0Eb1M=
-github.com/conduitio-labs/notionapi v0.0.0-20221214123948-7eddf0d502e8/go.mod h1:iHUKAxOmSyhXBlqI0PAviHqf+xBlS003Kmpz9nnoOZU=
+github.com/conduitio-labs/notionapi v0.0.0-20221214135932-7ff748e245f3 h1:t4kMcfK+O9CjzXoc3BeMqgBbQkl7/d8waJLI01pNa3g=
+github.com/conduitio-labs/notionapi v0.0.0-20221214135932-7ff748e245f3/go.mod h1:iHUKAxOmSyhXBlqI0PAviHqf+xBlS003Kmpz9nnoOZU=
 github.com/conduitio/conduit-connector-protocol v0.2.0 h1:gwYXVKEMgTtU67ephQ5WwTGIDbT/eTLA9Mdr9Bnbqxc=
 github.com/conduitio/conduit-connector-protocol v0.2.0/go.mod h1:udCU2AkLcYQoLjAO06tHVL2iFJPw+DamK+wllnj50hk=
 github.com/conduitio/conduit-connector-sdk v0.2.0 h1:yReJT3SOAGqJIlk59WC5FPgpv0Gg+NG4NFj6FJ89XnM=

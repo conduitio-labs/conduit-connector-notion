@@ -3,7 +3,7 @@ module github.com/conduitio-labs/conduit-connector-notion
 go 1.19
 
 require (
-	github.com/conduitio-labs/notionapi v0.0.0-20221214123948-7eddf0d502e8
+	github.com/conduitio-labs/notionapi v0.0.0-20221214135932-7ff748e245f3
 	github.com/conduitio/conduit-connector-sdk v0.2.0
 	github.com/matryer/is v1.4.0
 	github.com/tidwall/gjson v1.14.4
