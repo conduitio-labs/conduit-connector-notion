@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"strconv"
 	"time"
 
@@ -45,11 +44,17 @@ type recordPayload struct {
 	Metadata  map[string]string `json:"metadata"`
 }
 
+type client interface {
+	GetPage(ctx context.Context, id string) (*notion.Page, error)
+	Init(token string)
+	GetPages(ctx context.Context, cursor notion.Cursor) (*notion.SearchResponse, error)
+}
+
 type Source struct {
 	sdk.UnimplementedSource
 
 	config Config
-	client *notion.Client
+	client client
 	// lastMinuteRead is the last minute from which we
 	// processed all pages
 	lastMinuteRead time.Time
@@ -60,7 +65,7 @@ type Source struct {
 }
 
 func NewSource() sdk.Source {
-	return &Source{}
+	return &Source{client: newDefaultClient()}
 }
 
 func (s *Source) Parameters() map[string]sdk.Parameter {
@@ -90,7 +95,7 @@ func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 }
 
 func (s *Source) Open(_ context.Context, pos sdk.Position) error {
-	s.client = notion.NewClient(notion.Token(s.config.token))
+	s.client.Init(s.config.token)
 	err := s.initPosition(pos)
 	if err != nil {
 		return fmt.Errorf("failed initializing position: %w", err)
@@ -134,20 +139,19 @@ func (s *Source) nextPage(ctx context.Context) (sdk.Record, error) {
 		Msg("fetching page")
 
 	// fetch the page and then all of its children
-	page, err := s.client.Page.Get(ctx, notion.PageID(id))
+	page, err := s.client.GetPage(ctx, id)
+	// The search endpoint that we use to list all the pages
+	// can return stale results.
+	// It's also possible that a page has been deleted after
+	// we got the ID but before we actually read the whole page.
+	if errors.Is(err, errPageNotFound) {
+		sdk.Logger(ctx).Info().
+			Str("block_id", id).
+			Msg("the resource does not exist or the resource has not been shared with owner of the token")
+
+		return s.nextPage(ctx)
+	}
 	if err != nil {
-		// The search endpoint that we use to list all the pages
-		// can return stale results.
-		// It's also possible that a page has been deleted after
-		// we got the ID but before we actually read the whole page.
-		if s.notFound(err) {
-			sdk.Logger(ctx).Info().
-				Str("block_id", id).
-				Msg("the resource does not exist or the resource has not been shared with owner of the token")
-
-			return s.nextPage(ctx)
-		}
-
 		return sdk.Record{}, fmt.Errorf("failed fetching page %v: %w", id, err)
 	}
 
@@ -168,45 +172,6 @@ func (s *Source) nextPage(ctx context.Context) (sdk.Record, error) {
 	}
 	record.Position = pos
 	return record, nil
-}
-
-// getChildren gets all the child and grand-child blocks of the input block
-func (s *Source) getChildren(ctx context.Context, blockID string) ([]notion.Block, error) {
-	var children []notion.Block
-
-	fetch := true
-	var cursor notion.Cursor
-	for fetch {
-		resp, err := s.client.Block.GetChildren(
-			ctx,
-			notion.BlockID(blockID),
-			&notion.Pagination{
-				StartCursor: cursor,
-			},
-		)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"failed getting children for block ID %v, cursor %v: %w",
-				blockID,
-				cursor,
-				err,
-			)
-		}
-
-		// get grandchildren as well
-		for _, child := range resp.Results {
-			children = append(children, child)
-			grandChildren, err := s.getChildren(ctx, child.GetID().String())
-			if err != nil {
-				return nil, err
-			}
-			children = append(children, grandChildren...)
-		}
-
-		fetch = resp.HasMore
-		cursor = notion.Cursor(resp.NextCursor)
-	}
-	return children, nil
 }
 
 func (s *Source) Ack(context.Context, sdk.Position) error {
@@ -235,7 +200,7 @@ func (s *Source) populateIDs(ctx context.Context) error {
 	fetch := true
 	var cursor notion.Cursor
 	for fetch {
-		results, err := s.getPages(ctx, cursor)
+		results, err := s.client.GetPages(ctx, cursor)
 		if err != nil {
 			return fmt.Errorf("search failed: %w", err)
 		}
@@ -275,21 +240,6 @@ func (s *Source) hasChanged(page *notion.Page) bool {
 	lastTopMinute := time.Now().Truncate(time.Minute)
 	return page.LastEditedTime.After(s.lastMinuteRead) &&
 		page.LastEditedTime.Before(lastTopMinute)
-}
-
-func (s *Source) getPages(ctx context.Context, cursor notion.Cursor) (*notion.SearchResponse, error) {
-	req := &notion.SearchRequest{
-		StartCursor: cursor,
-		Sort: &notion.SortObject{
-			Direction: notion.SortOrderASC,
-			Timestamp: notion.TimestampLastEdited,
-		},
-		Filter: map[string]string{
-			"property": "object",
-			"value":    "page",
-		},
-	}
-	return s.client.Search.Do(ctx, req)
 }
 
 func (s *Source) pageToRecord(ctx context.Context, page *notion.Page, children notion.Blocks) (sdk.Record, error) {
@@ -388,14 +338,6 @@ func (s *Source) getPageTitle(page *notion.Page) string {
 	}
 
 	return tp.Title[0].PlainText
-}
-
-func (s *Source) notFound(err error) bool {
-	nErr, ok := err.(*notion.Error)
-	if !ok {
-		return false
-	}
-	return nErr.Status == http.StatusNotFound
 }
 
 // savePosition saves the position, if it's safe to do so.
