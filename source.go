@@ -50,7 +50,7 @@ type Source struct {
 
 	config         Config
 	client         *notion.Client
-	lastEditedTime time.Time
+	lastMinuteRead time.Time
 	fetchIDs       []string
 	lastFetch      time.Time
 }
@@ -103,7 +103,7 @@ func (s *Source) initPosition(sdkPos sdk.Position) error {
 	if err != nil {
 		return err
 	}
-	s.lastEditedTime = pos.LastEditedTime
+	s.lastMinuteRead = pos.LastEditedTime
 
 	return nil
 }
@@ -269,7 +269,7 @@ func (s *Source) addToFetchIDs(ctx context.Context, results *notion.SearchRespon
 func (s *Source) hasChanged(page *notion.Page) bool {
 	// see discussion in docs/cdc.md
 	lastTopMinute := time.Now().Truncate(time.Minute)
-	return page.LastEditedTime.After(s.lastEditedTime) &&
+	return page.LastEditedTime.After(s.lastMinuteRead) &&
 		page.LastEditedTime.Before(lastTopMinute)
 }
 
@@ -308,7 +308,7 @@ func (s *Source) getPosition(page *notion.Page) (sdk.Position, error) {
 	}
 	return position{
 		ID:             page.ID.String(),
-		LastEditedTime: s.lastEditedTime,
+		LastEditedTime: s.lastMinuteRead,
 	}.toSDKPosition()
 }
 
@@ -395,7 +395,7 @@ func (s *Source) notFound(err error) bool {
 }
 
 // savePosition saves the position, if it's safe to do so.
-func (s *Source) savePosition(lastEditedTime time.Time) {
+func (s *Source) savePosition(t time.Time) {
 	// The precision of a page's last_edited_time field is in minutes.
 	// Hence, to save it as a position (from which we can safely resume
 	// reading new records), we need to be sure that all pages from
@@ -403,8 +403,8 @@ func (s *Source) savePosition(lastEditedTime time.Time) {
 
 	// todo instead of check the queue of IDs to fetch
 	// we can check the respective pages' last_edited_times
-	// and make sure nothing is left from lastEditedTime's minute.
-	if lastEditedTime.Before(s.lastFetch) && len(s.fetchIDs) == 0 {
-		s.lastEditedTime = lastEditedTime
+	// and make sure nothing is left from `lastMinuteRead`.
+	if t.Before(s.lastFetch) && len(s.fetchIDs) == 0 {
+		s.lastMinuteRead = t
 	}
 }

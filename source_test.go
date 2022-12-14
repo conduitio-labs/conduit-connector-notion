@@ -43,7 +43,7 @@ func TestSource_Open_NilPosition(t *testing.T) {
 	underTest := NewSource().(*Source)
 	err := underTest.Open(context.Background(), nil)
 	is.NoErr(err)
-	is.True(underTest.lastEditedTime.IsZero())
+	is.True(underTest.lastMinuteRead.IsZero())
 }
 
 func TestSource_Open_WithPosition(t *testing.T) {
@@ -58,5 +58,5 @@ func TestSource_Open_WithPosition(t *testing.T) {
 
 	err = underTest.Open(context.Background(), sdkPos)
 	is.NoErr(err)
-	is.True(pos.LastEditedTime.Equal(underTest.lastEditedTime))
+	is.True(pos.LastEditedTime.Equal(underTest.lastMinuteRead))
 }
