@@ -16,15 +16,91 @@ package notion
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	notion "github.com/conduitio-labs/notionapi"
+	sdk "github.com/conduitio/conduit-connector-sdk"
 	"net/http"
+	"time"
+
+	notion "github.com/conduitio-labs/notionapi"
 )
 
 var (
 	errPageNotFound = errors.New("page not found")
 )
+
+type page struct {
+	id             string
+	parent         string
+	url            string
+	createdBy      string
+	createdTime    time.Time
+	lastEditedBy   string
+	lastEditedTime time.Time
+	archived       bool
+	properties     notion.Properties
+	children       []notion.Block
+}
+
+func newPage(pg *notion.Page, children []notion.Block) page {
+	return page{
+		id:             pg.ID.String(),
+		parent:         toJSON(pg.Parent),
+		url:            pg.URL,
+		createdTime:    pg.CreatedTime,
+		createdBy:      toJSON(pg.CreatedBy),
+		lastEditedBy:   toJSON(pg.LastEditedBy),
+		lastEditedTime: pg.LastEditedTime,
+		archived:       pg.Archived,
+		properties:     pg.Properties,
+		children:       children,
+	}
+}
+
+// toJSON converts `v` into a JSON string.
+// In case that's not possible, the function returns an empty string.
+func toJSON(v any) string {
+	bytes, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	return string(bytes)
+}
+
+func (p page) plainText(ctx context.Context) (string, error) {
+	var plainText string
+	for _, c := range p.children {
+		text, err := extractText(c)
+		if errors.Is(err, errNoExtractor) {
+			sdk.Logger(ctx).Warn().
+				Str("block_type", c.GetType().String()).
+				Msg("no text extractor registered")
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		plainText += text + "\n"
+	}
+
+	return plainText, nil
+}
+
+// title returns a page's title.
+// In case that's not possible, the function returns an empty string.
+func (p page) title() string {
+	if len(p.properties) == 0 {
+		return ""
+	}
+
+	tp, ok := p.properties["title"].(*notion.TitleProperty)
+	if !ok || len(tp.Title) == 0 {
+		return ""
+	}
+
+	return tp.Title[0].PlainText
+}
 
 type defaultClient struct {
 	client *notion.Client
@@ -53,25 +129,25 @@ func (c *defaultClient) Init(token string) {
 	notion.NewClient(notion.Token(token))
 }
 
-func (c *defaultClient) GetPage(ctx context.Context, id string) (*notion.Page, error) {
-	page, err := c.client.Page.Get(ctx, notion.PageID(id))
+func (c *defaultClient) GetPage(ctx context.Context, id string) (page, error) {
+	pg, err := c.client.Page.Get(ctx, notion.PageID(id))
 	if err != nil {
 		// The search endpoint that we use to list all the pages
 		// can return stale results.
 		// It's also possible that a page has been deleted after
 		// we got the ID but before we actually read the whole page.
 		if c.notFound(err) {
-			return nil, fmt.Errorf("page %v: %w", id, errPageNotFound)
+			return page{}, fmt.Errorf("page %v: %w", id, errPageNotFound)
 		}
 
-		return nil, fmt.Errorf("failed fetching page %v: %w", id, err)
+		return page{}, fmt.Errorf("failed fetching page %v: %w", id, err)
 	}
 
 	children, err := c.getChildren(ctx, id)
 	if err != nil {
-		return nil, fmt.Errorf("failed fetching content for %v: %w", id, err)
+		return page{}, fmt.Errorf("failed fetching content for %v: %w", id, err)
 	}
-	return page, err
+	return newPage(pg, children), err
 }
 
 func (c *defaultClient) notFound(err error) bool {

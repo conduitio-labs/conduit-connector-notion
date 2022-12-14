@@ -45,7 +45,7 @@ type recordPayload struct {
 }
 
 type client interface {
-	GetPage(ctx context.Context, id string) (*notion.Page, error)
+	GetPage(ctx context.Context, id string) (page, error)
 	Init(token string)
 	GetPages(ctx context.Context, cursor notion.Cursor) (*notion.SearchResponse, error)
 }
@@ -139,7 +139,7 @@ func (s *Source) nextPage(ctx context.Context) (sdk.Record, error) {
 		Msg("fetching page")
 
 	// fetch the page and then all of its children
-	page, err := s.client.GetPage(ctx, id)
+	pg, err := s.client.GetPage(ctx, id)
 	// The search endpoint that we use to list all the pages
 	// can return stale results.
 	// It's also possible that a page has been deleted after
@@ -155,18 +155,13 @@ func (s *Source) nextPage(ctx context.Context) (sdk.Record, error) {
 		return sdk.Record{}, fmt.Errorf("failed fetching page %v: %w", id, err)
 	}
 
-	children, err := s.getChildren(ctx, id)
-	if err != nil {
-		return sdk.Record{}, fmt.Errorf("failed fetching content for %v: %w", id, err)
-	}
-
-	record, err := s.pageToRecord(ctx, page, children)
+	record, err := s.pageToRecord(ctx, pg)
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed transforming page %v to record: %w", id, err)
 	}
 
-	s.savePosition(page.LastEditedTime)
-	pos, err := s.getPosition(page)
+	s.savePosition(pg.lastEditedTime)
+	pos, err := s.getPosition(pg)
 	if err != nil {
 		return sdk.Record{}, err
 	}
@@ -242,8 +237,8 @@ func (s *Source) hasChanged(page *notion.Page) bool {
 		page.LastEditedTime.Before(lastTopMinute)
 }
 
-func (s *Source) pageToRecord(ctx context.Context, page *notion.Page, children notion.Blocks) (sdk.Record, error) {
-	payload, err := s.getPayload(ctx, children, s.getMetadata(page))
+func (s *Source) pageToRecord(ctx context.Context, pg page) (sdk.Record, error) {
+	payload, err := s.getPayload(ctx, pg)
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed getting payload: %w", err)
 	}
@@ -251,17 +246,14 @@ func (s *Source) pageToRecord(ctx context.Context, page *notion.Page, children n
 	return sdk.Record{
 		Metadata:  nil,
 		CreatedAt: time.Now(),
-		Key:       sdk.RawData(page.ID),
+		Key:       sdk.RawData(pg.id),
 		Payload:   payload,
 	}, nil
 }
 
-func (s *Source) getPosition(page *notion.Page) (sdk.Position, error) {
-	if page == nil {
-		return nil, nil
-	}
+func (s *Source) getPosition(pg page) (sdk.Position, error) {
 	return position{
-		ID:             page.ID.String(),
+		ID:             pg.id,
 		LastEditedTime: s.lastMinuteRead,
 	}.toSDKPosition()
 }
@@ -275,69 +267,29 @@ func (s *Source) fromSDKPosition(sdkPos sdk.Position) (position, error) {
 	return pos, nil
 }
 
-func (s *Source) getPayload(
-	ctx context.Context,
-	children notion.Blocks,
-	metadata map[string]string,
-) (sdk.RawData, error) {
-	var plainText string
-	for _, c := range children {
-		text, err := extractText(c)
-		if errors.Is(err, errNoExtractor) {
-			sdk.Logger(ctx).Warn().
-				Str("block_type", c.GetType().String()).
-				Msg("no text extractor registered")
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		plainText += text + "\n"
+func (s *Source) getPayload(ctx context.Context, pg page) (sdk.RawData, error) {
+	plainText, err := pg.plainText(ctx)
+	if err != nil {
+		return nil, err
 	}
-
 	payload := recordPayload{
 		Plaintext: plainText,
-		Metadata:  metadata,
+		Metadata:  s.getMetadata(pg),
 	}
 	return json.Marshal(payload)
 }
 
-func (s *Source) getMetadata(page *notion.Page) map[string]string {
+func (s *Source) getMetadata(pg page) map[string]string {
 	return map[string]string{
-		"notion.title":          s.getPageTitle(page),
-		"notion.url":            page.URL,
-		"notion.createdTime":    page.CreatedTime.Format(time.RFC3339),
-		"notion.lastEditedTime": page.LastEditedTime.Format(time.RFC3339),
-		"notion.createdBy":      s.toJSON(page.CreatedBy),
-		"notion.lastEditedBy":   s.toJSON(page.LastEditedBy),
-		"notion.archived":       strconv.FormatBool(page.Archived),
-		"notion.parent":         s.toJSON(page.Parent),
+		"notion.title":          pg.title(),
+		"notion.url":            pg.url,
+		"notion.createdTime":    pg.createdTime.Format(time.RFC3339),
+		"notion.lastEditedTime": pg.lastEditedTime.Format(time.RFC3339),
+		"notion.createdBy":      pg.createdBy,
+		"notion.lastEditedBy":   pg.lastEditedBy,
+		"notion.archived":       strconv.FormatBool(pg.archived),
+		"notion.parent":         pg.parent,
 	}
-}
-
-// toJSON converts `v` into a JSON string.
-// In case that's not possible, the function returns an empty string.
-func (s *Source) toJSON(v any) string {
-	bytes, err := json.Marshal(v)
-	if err != nil {
-		return ""
-	}
-	return string(bytes)
-}
-
-// getPageTitle returns the input page's title.
-// In case that's not possible, the function returns an empty string.
-func (s *Source) getPageTitle(page *notion.Page) string {
-	if page == nil || len(page.Properties) == 0 {
-		return ""
-	}
-
-	tp, ok := page.Properties["title"].(*notion.TitleProperty)
-	if !ok || len(tp.Title) == 0 {
-		return ""
-	}
-
-	return tp.Title[0].PlainText
 }
 
 // savePosition saves the position, if it's safe to do so.
