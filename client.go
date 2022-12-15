@@ -106,21 +106,6 @@ type defaultClient struct {
 	client *notion.Client
 }
 
-func (c *defaultClient) GetPages(ctx context.Context, cursor notion.Cursor) (*notion.SearchResponse, error) {
-	req := &notion.SearchRequest{
-		StartCursor: cursor,
-		Sort: &notion.SortObject{
-			Direction: notion.SortOrderASC,
-			Timestamp: notion.TimestampLastEdited,
-		},
-		Filter: map[string]string{
-			"property": "object",
-			"value":    "page",
-		},
-	}
-	return c.client.Search.Do(ctx, req)
-}
-
 func newDefaultClient() *defaultClient {
 	return &defaultClient{}
 }
@@ -195,4 +180,53 @@ func (c *defaultClient) getChildren(ctx context.Context, blockID string) ([]noti
 		cursor = notion.Cursor(resp.NextCursor)
 	}
 	return children, nil
+}
+
+func (c *defaultClient) GetPages(ctx context.Context) ([]page, error) {
+	var pages []page
+
+	fetch := true
+	var cursor notion.Cursor
+	for fetch {
+		response, err := c.searchPages(ctx, cursor)
+		if err != nil {
+			return nil, fmt.Errorf("search failed: %w", err)
+		}
+		c.addPages(ctx, pages, response.Results)
+
+		fetch = response.HasMore
+		cursor = response.NextCursor
+	}
+
+	return pages, nil
+}
+
+func (c *defaultClient) searchPages(ctx context.Context, cursor notion.Cursor) (*notion.SearchResponse, error) {
+	req := &notion.SearchRequest{
+		StartCursor: cursor,
+		Sort: &notion.SortObject{
+			Direction: notion.SortOrderASC,
+			Timestamp: notion.TimestampLastEdited,
+		},
+		Filter: map[string]string{
+			"property": "object",
+			"value":    "page",
+		},
+	}
+	response, err := c.client.Search.Do(ctx, req)
+	return response, err
+}
+
+func (c *defaultClient) addPages(ctx context.Context, pages []page, results []notion.Object) {
+	for _, result := range results {
+		switch result.GetObject().String() {
+		case "page":
+			pg := result.(*notion.Page)
+			pages = append(pages, newPage(pg, nil))
+		default:
+			sdk.Logger(ctx).Warn().
+				Str("object_type", result.GetObject().String()).
+				Msg("object type currently not supported")
+		}
+	}
 }

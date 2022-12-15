@@ -22,7 +22,6 @@ import (
 	"strconv"
 	"time"
 
-	notion "github.com/conduitio-labs/notionapi"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
@@ -47,7 +46,7 @@ type recordPayload struct {
 type client interface {
 	GetPage(ctx context.Context, id string) (page, error)
 	Init(token string)
-	GetPages(ctx context.Context, cursor notion.Cursor) (*notion.SearchResponse, error)
+	GetPages(ctx context.Context) ([]page, error)
 }
 
 type Source struct {
@@ -65,7 +64,11 @@ type Source struct {
 }
 
 func NewSource() sdk.Source {
-	return &Source{client: newDefaultClient()}
+	return NewSourceWithClient(newDefaultClient())
+}
+
+func NewSourceWithClient(c client) sdk.Source {
+	return &Source{client: c}
 }
 
 func (s *Source) Parameters() map[string]sdk.Parameter {
@@ -192,49 +195,35 @@ func (s *Source) populateIDs(ctx context.Context) error {
 	s.lastPoll = time.Now()
 
 	sdk.Logger(ctx).Debug().Msg("populating IDs")
-	fetch := true
-	var cursor notion.Cursor
-	for fetch {
-		results, err := s.client.GetPages(ctx, cursor)
-		if err != nil {
-			return fmt.Errorf("search failed: %w", err)
-		}
-		s.addToFetchIDs(ctx, results)
-
-		fetch = results.HasMore
-		cursor = results.NextCursor
+	allPages, err := s.client.GetPages(ctx)
+	if err != nil {
+		return fmt.Errorf("failed getting changed pages: %w", err)
 	}
 
-	sdk.Logger(ctx).Info().Msgf("fetched %v IDs", len(s.fetchIDs))
+	s.addToFetchIDs(ctx, allPages)
+	sdk.Logger(ctx).Debug().Msgf("fetched %v IDs", len(s.fetchIDs))
+
 	return nil
 }
 
-func (s *Source) addToFetchIDs(ctx context.Context, results *notion.SearchResponse) {
-	for _, result := range results.Results {
-		switch result.GetObject().String() {
-		case "page":
-			page := result.(*notion.Page)
-			sdk.Logger(ctx).Trace().
-				Str("page_id", page.ID.String()).
-				Time("last_edited_time", page.LastEditedTime).
-				Time("created_time", page.CreatedTime).
-				Msg("checking if page has changed")
-			if s.hasChanged(page) {
-				s.fetchIDs = append(s.fetchIDs, page.ID.String())
-			}
-		default:
-			sdk.Logger(ctx).Warn().
-				Str("object_type", result.GetObject().String()).
-				Msg("object type currently not supported")
+func (s *Source) addToFetchIDs(ctx context.Context, pages []page) {
+	for _, pg := range pages {
+		sdk.Logger(ctx).Trace().
+			Str("page_id", pg.id).
+			Time("last_edited_time", pg.lastEditedTime).
+			Time("created_time", pg.createdTime).
+			Msg("checking if page has changed")
+		if s.hasChanged(pg) {
+			s.fetchIDs = append(s.fetchIDs, pg.id)
 		}
 	}
 }
 
-func (s *Source) hasChanged(page *notion.Page) bool {
+func (s *Source) hasChanged(pg page) bool {
 	// see discussion in docs/cdc.md
 	lastTopMinute := time.Now().Truncate(time.Minute)
-	return page.LastEditedTime.After(s.lastMinuteRead) &&
-		page.LastEditedTime.Before(lastTopMinute)
+	return pg.lastEditedTime.After(s.lastMinuteRead) &&
+		pg.lastEditedTime.Before(lastTopMinute)
 }
 
 func (s *Source) pageToRecord(ctx context.Context, pg page) (sdk.Record, error) {
