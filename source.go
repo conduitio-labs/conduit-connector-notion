@@ -228,17 +228,11 @@ func (s *Source) addToFetchIDs(ctx context.Context, pages []client.Page) {
 			Time("last_edited_time", pg.LastEditedTime).
 			Time("created_time", pg.CreatedTime).
 			Msg("checking if page has changed")
-		if s.hasChanged(pg) {
+
+		if pg.LastEditedTime.After(s.lastMinuteRead) {
 			s.fetchIDs = append(s.fetchIDs, pg.ID)
 		}
 	}
-}
-
-func (s *Source) hasChanged(pg client.Page) bool {
-	// see discussion in docs/cdc.md
-	lastTopMinute := time.Now().Truncate(time.Minute)
-	return pg.LastEditedTime.After(s.lastMinuteRead) &&
-		pg.LastEditedTime.Before(lastTopMinute)
 }
 
 func (s *Source) pageToRecord(ctx context.Context, pg client.Page) (sdk.Record, error) {
@@ -289,6 +283,11 @@ func (s *Source) getMetadata(pg client.Page) map[string]string {
 
 // savePosition saves the position, if it's safe to do so.
 func (s *Source) savePosition(t time.Time) {
+	// see discussion in docs/cdc.md
+	lastTopMinute := time.Now().Truncate(time.Minute)
+	if t.After(lastTopMinute) {
+		return
+	}
 	// The precision of a page's last_edited_time field is in minutes.
 	// Hence, to save it as a position (from which we can safely resume
 	// reading new records), we need to be sure that all pages from
