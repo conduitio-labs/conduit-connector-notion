@@ -21,6 +21,7 @@ import (
 	"fmt"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"net/http"
+	"strings"
 	"time"
 
 	notion "github.com/conduitio-labs/notionapi"
@@ -183,7 +184,7 @@ func (c *defaultClient) getChildren(ctx context.Context, blockID string) ([]noti
 }
 
 func (c *defaultClient) GetPages(ctx context.Context) ([]page, error) {
-	var pages []page
+	var allPages []page
 
 	fetch := true
 	var cursor notion.Cursor
@@ -194,13 +195,14 @@ func (c *defaultClient) GetPages(ctx context.Context) ([]page, error) {
 		}
 
 		sdk.Logger(ctx).Debug().Msgf("got search response with %v results", len(response.Results))
-		c.addPages(ctx, pages, response.Results)
+		pages, err := c.toPages(response.Results)
+		allPages = append(allPages, pages...)
 
 		fetch = response.HasMore
 		cursor = response.NextCursor
 	}
 
-	return pages, nil
+	return allPages, nil
 }
 
 func (c *defaultClient) searchPages(ctx context.Context, cursor notion.Cursor) (*notion.SearchResponse, error) {
@@ -219,16 +221,16 @@ func (c *defaultClient) searchPages(ctx context.Context, cursor notion.Cursor) (
 	return response, err
 }
 
-func (c *defaultClient) addPages(ctx context.Context, pages []page, results []notion.Object) {
+func (c *defaultClient) toPages(results []notion.Object) ([]page, error) {
+	pages := make([]page, len(results))
 	for _, result := range results {
-		switch result.GetObject().String() {
-		case "page":
-			pg := result.(*notion.Page)
-			pages = append(pages, newPage(pg, nil))
-		default:
-			sdk.Logger(ctx).Warn().
-				Str("object_type", result.GetObject().String()).
-				Msg("object type currently not supported")
+		if "page" != strings.ToLower(result.GetObject().String()) {
+			// shouldn't ever happen, as we requested only the pages in the search method.
+			return nil, fmt.Errorf("got unexpected object %q in search results", result.GetObject().String())
 		}
+		pg := result.(*notion.Page)
+		pages = append(pages, newPage(pg, nil))
 	}
+
+	return pages, nil
 }
