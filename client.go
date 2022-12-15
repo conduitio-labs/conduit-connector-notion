@@ -196,12 +196,14 @@ func (c *defaultClient) GetPages(ctx context.Context) ([]page, error) {
 
 		sdk.Logger(ctx).Debug().Msgf("got search response with %v results", len(response.Results))
 		pages, err := c.toPages(response.Results)
+		sdk.Logger(ctx).Info().Msgf("c.toPages returned %v pages", len(pages))
 		allPages = append(allPages, pages...)
 
 		fetch = response.HasMore
 		cursor = response.NextCursor
 	}
 
+	sdk.Logger(ctx).Info().Msgf("GetPages: %v pages", len(allPages))
 	return allPages, nil
 }
 
@@ -223,13 +225,12 @@ func (c *defaultClient) searchPages(ctx context.Context, cursor notion.Cursor) (
 
 func (c *defaultClient) toPages(results []notion.Object) ([]page, error) {
 	pages := make([]page, len(results))
-	for _, result := range results {
-		if "page" != strings.ToLower(result.GetObject().String()) {
+	for i, res := range results {
+		if "page" != strings.ToLower(res.GetObject().String()) {
 			// shouldn't ever happen, as we requested only the pages in the search method.
-			return nil, fmt.Errorf("got unexpected object %q in search results", result.GetObject().String())
+			return nil, fmt.Errorf("got unexpected object %q in search results", res.GetObject().String())
 		}
-		pg := result.(*notion.Page)
-		pages = append(pages, newPage(pg, nil))
+		pages[i] = newPage(res.(*notion.Page), nil)
 	}
 
 	return pages, nil
