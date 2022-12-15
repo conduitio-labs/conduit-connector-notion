@@ -207,6 +207,9 @@ func (s *Source) populateIDs(ctx context.Context) error {
 }
 
 func (s *Source) addToFetchIDs(ctx context.Context, pages []page) {
+	sdk.Logger(ctx).Debug().
+		Msgf("checking %v pages for changes", len(pages))
+
 	for _, pg := range pages {
 		sdk.Logger(ctx).Trace().
 			Str("page_id", pg.id).

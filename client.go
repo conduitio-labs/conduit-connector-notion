@@ -192,6 +192,8 @@ func (c *defaultClient) GetPages(ctx context.Context) ([]page, error) {
 		if err != nil {
 			return nil, fmt.Errorf("search failed: %w", err)
 		}
+
+		sdk.Logger(ctx).Debug().Msgf("got search response with %v results", len(response.Results))
 		c.addPages(ctx, pages, response.Results)
 
 		fetch = response.HasMore
