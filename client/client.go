@@ -12,48 +12,48 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package notion
+package client
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	sdk "github.com/conduitio/conduit-connector-sdk"
 	"net/http"
 	"strings"
 	"time"
 
 	notion "github.com/conduitio-labs/notionapi"
+	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
 var (
-	errPageNotFound = errors.New("page not found")
+	ErrPageNotFound = errors.New("page not found")
 )
 
-type page struct {
-	id             string
-	parent         string
-	url            string
-	createdBy      string
-	createdTime    time.Time
-	lastEditedBy   string
-	lastEditedTime time.Time
-	archived       bool
+type Page struct {
+	ID             string
+	Parent         string
+	URL            string
+	CreatedBy      string
+	CreatedTime    time.Time
+	LastEditedBy   string
+	LastEditedTime time.Time
+	Archived       bool
 	properties     notion.Properties
 	children       []notion.Block
 }
 
-func newPage(pg *notion.Page, children []notion.Block) page {
-	return page{
-		id:             pg.ID.String(),
-		parent:         toJSON(pg.Parent),
-		url:            pg.URL,
-		createdTime:    pg.CreatedTime,
-		createdBy:      toJSON(pg.CreatedBy),
-		lastEditedBy:   toJSON(pg.LastEditedBy),
-		lastEditedTime: pg.LastEditedTime,
-		archived:       pg.Archived,
+func newPage(pg *notion.Page, children []notion.Block) Page {
+	return Page{
+		ID:             pg.ID.String(),
+		Parent:         toJSON(pg.Parent),
+		URL:            pg.URL,
+		CreatedTime:    pg.CreatedTime,
+		CreatedBy:      toJSON(pg.CreatedBy),
+		LastEditedBy:   toJSON(pg.LastEditedBy),
+		LastEditedTime: pg.LastEditedTime,
+		Archived:       pg.Archived,
 		properties:     pg.Properties,
 		children:       children,
 	}
@@ -69,7 +69,7 @@ func toJSON(v any) string {
 	return string(bytes)
 }
 
-func (p page) plainText(ctx context.Context) (string, error) {
+func (p Page) PlainText(ctx context.Context) (string, error) {
 	var plainText string
 	for _, c := range p.children {
 		text, err := extractText(c)
@@ -90,7 +90,7 @@ func (p page) plainText(ctx context.Context) (string, error) {
 
 // title returns a page's title.
 // In case that's not possible, the function returns an empty string.
-func (p page) title() string {
+func (p Page) Title() string {
 	if len(p.properties) == 0 {
 		return ""
 	}
@@ -107,7 +107,7 @@ type defaultClient struct {
 	client *notion.Client
 }
 
-func newDefaultClient() *defaultClient {
+func New() *defaultClient {
 	return &defaultClient{}
 }
 
@@ -115,7 +115,7 @@ func (c *defaultClient) Init(token string) {
 	c.client = notion.NewClient(notion.Token(token))
 }
 
-func (c *defaultClient) GetPage(ctx context.Context, id string) (page, error) {
+func (c *defaultClient) GetPage(ctx context.Context, id string) (Page, error) {
 	pg, err := c.client.Page.Get(ctx, notion.PageID(id))
 	if err != nil {
 		// The search endpoint that we use to list all the pages
@@ -123,15 +123,15 @@ func (c *defaultClient) GetPage(ctx context.Context, id string) (page, error) {
 		// It's also possible that a page has been deleted after
 		// we got the ID but before we actually read the whole page.
 		if c.notFound(err) {
-			return page{}, fmt.Errorf("page %v: %w", id, errPageNotFound)
+			return Page{}, fmt.Errorf("page %v: %w", id, ErrPageNotFound)
 		}
 
-		return page{}, fmt.Errorf("failed fetching page %v: %w", id, err)
+		return Page{}, fmt.Errorf("failed fetching page %v: %w", id, err)
 	}
 
 	children, err := c.getChildren(ctx, id)
 	if err != nil {
-		return page{}, fmt.Errorf("failed fetching content for %v: %w", id, err)
+		return Page{}, fmt.Errorf("failed fetching content for %v: %w", id, err)
 	}
 	return newPage(pg, children), err
 }
@@ -183,8 +183,8 @@ func (c *defaultClient) getChildren(ctx context.Context, blockID string) ([]noti
 	return children, nil
 }
 
-func (c *defaultClient) GetPages(ctx context.Context) ([]page, error) {
-	var allPages []page
+func (c *defaultClient) GetPages(ctx context.Context) ([]Page, error) {
+	var allPages []Page
 
 	fetch := true
 	var cursor notion.Cursor
@@ -223,8 +223,8 @@ func (c *defaultClient) searchPages(ctx context.Context, cursor notion.Cursor) (
 	return response, err
 }
 
-func (c *defaultClient) toPages(results []notion.Object) ([]page, error) {
-	pages := make([]page, len(results))
+func (c *defaultClient) toPages(results []notion.Object) ([]Page, error) {
+	pages := make([]Page, len(results))
 	for i, res := range results {
 		if "page" != strings.ToLower(res.GetObject().String()) {
 			// shouldn't ever happen, as we requested only the pages in the search method.

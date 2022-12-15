@@ -8,6 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	client "github.com/conduitio-labs/conduit-connector-notion/client"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -35,10 +36,10 @@ func (m *Client) EXPECT() *ClientMockRecorder {
 }
 
 // GetPage mocks base method.
-func (m *Client) GetPage(arg0 context.Context, arg1 string) (notion.page, error) {
+func (m *Client) GetPage(arg0 context.Context, arg1 string) (client.Page, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPage", arg0, arg1)
-	ret0, _ := ret[0].(notion.page)
+	ret0, _ := ret[0].(client.Page)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -50,10 +51,10 @@ func (mr *ClientMockRecorder) GetPage(arg0, arg1 interface{}) *gomock.Call {
 }
 
 // GetPages mocks base method.
-func (m *Client) GetPages(arg0 context.Context) ([]notion.page, error) {
+func (m *Client) GetPages(arg0 context.Context) ([]client.Page, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPages", arg0)
-	ret0, _ := ret[0].([]notion.page)
+	ret0, _ := ret[0].([]client.Page)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

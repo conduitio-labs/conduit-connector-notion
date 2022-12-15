@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/conduitio-labs/conduit-connector-notion/client"
 	"strconv"
 	"time"
 
@@ -46,9 +47,9 @@ type recordPayload struct {
 }
 
 type Client interface {
-	GetPage(ctx context.Context, id string) (page, error)
+	GetPage(ctx context.Context, id string) (client.Page, error)
 	Init(token string)
-	GetPages(ctx context.Context) ([]page, error)
+	GetPages(ctx context.Context) ([]client.Page, error)
 }
 
 type Source struct {
@@ -66,7 +67,7 @@ type Source struct {
 }
 
 func NewSource() sdk.Source {
-	return NewSourceWithClient(newDefaultClient())
+	return NewSourceWithClient(client.New())
 }
 
 func NewSourceWithClient(c Client) sdk.Source {
@@ -149,7 +150,7 @@ func (s *Source) nextPage(ctx context.Context) (sdk.Record, error) {
 	// can return stale results.
 	// It's also possible that a page has been deleted after
 	// we got the ID but before we actually read the whole page.
-	if errors.Is(err, errPageNotFound) {
+	if errors.Is(err, client.ErrPageNotFound) {
 		sdk.Logger(ctx).Info().
 			Str("block_id", id).
 			Msg("the resource does not exist or the resource has not been shared with owner of the token")
@@ -165,7 +166,7 @@ func (s *Source) nextPage(ctx context.Context) (sdk.Record, error) {
 		return sdk.Record{}, fmt.Errorf("failed transforming page %v to record: %w", id, err)
 	}
 
-	s.savePosition(pg.lastEditedTime)
+	s.savePosition(pg.LastEditedTime)
 	pos, err := s.getPosition(pg)
 	if err != nil {
 		return sdk.Record{}, err
@@ -208,30 +209,30 @@ func (s *Source) populateIDs(ctx context.Context) error {
 	return nil
 }
 
-func (s *Source) addToFetchIDs(ctx context.Context, pages []page) {
+func (s *Source) addToFetchIDs(ctx context.Context, pages []client.Page) {
 	sdk.Logger(ctx).Debug().
 		Msgf("checking %v pages for changes", len(pages))
 
 	for _, pg := range pages {
 		sdk.Logger(ctx).Trace().
-			Str("page_id", pg.id).
-			Time("last_edited_time", pg.lastEditedTime).
-			Time("created_time", pg.createdTime).
+			Str("page_id", pg.ID).
+			Time("last_edited_time", pg.LastEditedTime).
+			Time("created_time", pg.CreatedTime).
 			Msg("checking if page has changed")
 		if s.hasChanged(pg) {
-			s.fetchIDs = append(s.fetchIDs, pg.id)
+			s.fetchIDs = append(s.fetchIDs, pg.ID)
 		}
 	}
 }
 
-func (s *Source) hasChanged(pg page) bool {
+func (s *Source) hasChanged(pg client.Page) bool {
 	// see discussion in docs/cdc.md
 	lastTopMinute := time.Now().Truncate(time.Minute)
-	return pg.lastEditedTime.After(s.lastMinuteRead) &&
-		pg.lastEditedTime.Before(lastTopMinute)
+	return pg.LastEditedTime.After(s.lastMinuteRead) &&
+		pg.LastEditedTime.Before(lastTopMinute)
 }
 
-func (s *Source) pageToRecord(ctx context.Context, pg page) (sdk.Record, error) {
+func (s *Source) pageToRecord(ctx context.Context, pg client.Page) (sdk.Record, error) {
 	payload, err := s.getPayload(ctx, pg)
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed getting payload: %w", err)
@@ -240,14 +241,14 @@ func (s *Source) pageToRecord(ctx context.Context, pg page) (sdk.Record, error) 
 	return sdk.Record{
 		Metadata:  nil,
 		CreatedAt: time.Now(),
-		Key:       sdk.RawData(pg.id),
+		Key:       sdk.RawData(pg.ID),
 		Payload:   payload,
 	}, nil
 }
 
-func (s *Source) getPosition(pg page) (sdk.Position, error) {
+func (s *Source) getPosition(pg client.Page) (sdk.Position, error) {
 	return position{
-		ID:             pg.id,
+		ID:             pg.ID,
 		LastEditedTime: s.lastMinuteRead,
 	}.toSDKPosition()
 }
@@ -261,8 +262,8 @@ func (s *Source) fromSDKPosition(sdkPos sdk.Position) (position, error) {
 	return pos, nil
 }
 
-func (s *Source) getPayload(ctx context.Context, pg page) (sdk.RawData, error) {
-	plainText, err := pg.plainText(ctx)
+func (s *Source) getPayload(ctx context.Context, pg client.Page) (sdk.RawData, error) {
+	plainText, err := pg.PlainText(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -273,16 +274,16 @@ func (s *Source) getPayload(ctx context.Context, pg page) (sdk.RawData, error) {
 	return json.Marshal(payload)
 }
 
-func (s *Source) getMetadata(pg page) map[string]string {
+func (s *Source) getMetadata(pg client.Page) map[string]string {
 	return map[string]string{
-		"notion.title":          pg.title(),
-		"notion.url":            pg.url,
-		"notion.createdTime":    pg.createdTime.Format(time.RFC3339),
-		"notion.lastEditedTime": pg.lastEditedTime.Format(time.RFC3339),
-		"notion.createdBy":      pg.createdBy,
-		"notion.lastEditedBy":   pg.lastEditedBy,
-		"notion.archived":       strconv.FormatBool(pg.archived),
-		"notion.parent":         pg.parent,
+		"notion.title":          pg.Title(),
+		"notion.url":            pg.URL,
+		"notion.createdTime":    pg.CreatedTime.Format(time.RFC3339),
+		"notion.lastEditedTime": pg.LastEditedTime.Format(time.RFC3339),
+		"notion.createdBy":      pg.CreatedBy,
+		"notion.lastEditedBy":   pg.LastEditedBy,
+		"notion.archived":       strconv.FormatBool(pg.Archived),
+		"notion.parent":         pg.Parent,
 	}
 }
 
