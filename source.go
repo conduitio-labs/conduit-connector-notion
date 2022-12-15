@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//go:generate mockgen -destination=mock/client.go -package=mock -mock_names=client=client . client
+//go:generate mockgen -destination=mock/client.go -package=mock -mock_names=Client=Client . Client
 
 package notion
 
