@@ -17,6 +17,11 @@ package notion
 import (
 	"context"
 	"errors"
+	"github.com/conduitio-labs/conduit-connector-notion/client"
+	"github.com/conduitio-labs/conduit-connector-notion/mock"
+	sdk "github.com/conduitio/conduit-connector-sdk"
+	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
 	"testing"
 	"time"
 
@@ -62,5 +67,49 @@ func TestSource_Open_WithPosition(t *testing.T) {
 }
 
 func TestSource_Read_NoPages(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
 
+	underTest, client := setupTest(ctx, t)
+	client.EXPECT().GetPages(gomock.Any()).Return(nil, nil)
+
+	_, err := underTest.Read(ctx)
+	is.True(errors.Is(err, sdk.ErrBackoffRetry))
+}
+
+func TestSource_Read_PagesSameTimestamp(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+
+	lastEdited := time.Now().Add(-time.Hour)
+	p1 := client.Page{ID: uuid.New().String(), LastEditedTime: lastEdited}
+	p2 := client.Page{ID: uuid.New().String(), LastEditedTime: lastEdited}
+
+	underTest, cl := setupTest(ctx, t)
+	cl.EXPECT().GetPages(gomock.Any()).Return([]client.Page{p1, p2}, nil)
+	cl.EXPECT().GetPage(gomock.Any(), p1.ID).Return(p1, nil)
+
+	// the position should not contain a timestamp
+	// as we didn't read page p2 which is from the same minute
+	wantPos, err := position{ID: p1.ID}.toSDKPosition()
+	is.NoErr(err)
+
+	r1, err := underTest.Read(ctx)
+	is.NoErr(err)
+	is.Equal(wantPos, r1.Position)
+}
+
+func setupTest(ctx context.Context, t *testing.T) (*Source, *mock.Client) {
+	is := is.New(t)
+
+	token := "irrelevant-token"
+	client := mock.NewClient(gomock.NewController(t))
+	client.EXPECT().Init(token)
+	underTest := NewSourceWithClient(client)
+	err := underTest.Configure(ctx, map[string]string{Token: token})
+	is.NoErr(err)
+	err = underTest.Open(ctx, nil)
+	is.NoErr(err)
+
+	return underTest.(*Source), client
 }

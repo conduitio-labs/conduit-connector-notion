@@ -6,6 +6,7 @@ require (
 	github.com/conduitio-labs/notionapi v0.0.0-20221214135932-7ff748e245f3
 	github.com/conduitio/conduit-connector-sdk v0.2.0
 	github.com/golang/mock v1.6.0
+	github.com/google/uuid v1.1.2
 	github.com/matryer/is v1.4.0
 	github.com/tidwall/gjson v1.14.4
 )
