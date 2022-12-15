@@ -60,3 +60,7 @@ func TestSource_Open_WithPosition(t *testing.T) {
 	is.NoErr(err)
 	is.True(pos.LastEditedTime.Equal(underTest.lastMinuteRead))
 }
+
+func TestSource_Read_NoPages(t *testing.T) {
+
+}

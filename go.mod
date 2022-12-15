@@ -5,6 +5,7 @@ go 1.19
 require (
 	github.com/conduitio-labs/notionapi v0.0.0-20221214135932-7ff748e245f3
 	github.com/conduitio/conduit-connector-sdk v0.2.0
+	github.com/golang/mock v1.6.0
 	github.com/matryer/is v1.4.0
 	github.com/tidwall/gjson v1.14.4
 )
@@ -12,7 +13,6 @@ require (
 require (
 	github.com/conduitio/conduit-connector-protocol v0.2.0 // indirect
 	github.com/fatih/color v1.7.0 // indirect
-	github.com/golang/mock v1.6.0 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/hashicorp/go-hclog v0.14.1 // indirect
 	github.com/hashicorp/go-plugin v1.4.3 // indirect
@@ -27,9 +27,12 @@ require (
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
 	go.buf.build/library/go-grpc/conduitio/conduit-connector-protocol v1.4.1 // indirect
+	golang.org/x/mod v0.4.2 // indirect
 	golang.org/x/net v0.0.0-20211108170745-6635138e15ea // indirect
 	golang.org/x/sys v0.0.0-20220405052023-b1e9470b6e64 // indirect
 	golang.org/x/text v0.3.7 // indirect
+	golang.org/x/tools v0.1.7 // indirect
+	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/genproto v0.0.0-20211104193956-4c6863e31247 // indirect
 	google.golang.org/grpc v1.43.0 // indirect
 	google.golang.org/protobuf v1.27.1 // indirect

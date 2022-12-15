@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate mockgen -destination=mock/client.go -package=mock -mock_names=client=client . client
+
 package notion
 
 import (
@@ -43,7 +45,7 @@ type recordPayload struct {
 	Metadata  map[string]string `json:"metadata"`
 }
 
-type client interface {
+type Client interface {
 	GetPage(ctx context.Context, id string) (page, error)
 	Init(token string)
 	GetPages(ctx context.Context) ([]page, error)
@@ -53,7 +55,7 @@ type Source struct {
 	sdk.UnimplementedSource
 
 	config Config
-	client client
+	client Client
 	// lastMinuteRead is the last minute from which we
 	// processed all pages
 	lastMinuteRead time.Time
@@ -67,7 +69,7 @@ func NewSource() sdk.Source {
 	return NewSourceWithClient(newDefaultClient())
 }
 
-func NewSourceWithClient(c client) sdk.Source {
+func NewSourceWithClient(c Client) sdk.Source {
 	return &Source{client: c}
 }
 
