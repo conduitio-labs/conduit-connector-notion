@@ -41,6 +41,15 @@ func (p position) toSDKPosition() (sdk.Position, error) {
 	return bytes, nil
 }
 
+func fromSDKPosition(sdkPos sdk.Position) (position, error) {
+	pos := position{}
+	err := json.Unmarshal(sdkPos, &pos)
+	if err != nil {
+		return position{}, fmt.Errorf("failed unmarshalling position: %w", err)
+	}
+	return pos, nil
+}
+
 type recordPayload struct {
 	Plaintext string            `json:"plaintext"`
 	Metadata  map[string]string `json:"metadata"`
@@ -114,7 +123,7 @@ func (s *Source) initPosition(sdkPos sdk.Position) error {
 		return nil
 	}
 
-	pos, err := s.fromSDKPosition(sdkPos)
+	pos, err := fromSDKPosition(sdkPos)
 	if err != nil {
 		return err
 	}
@@ -251,15 +260,6 @@ func (s *Source) getPosition(pg client.Page) (sdk.Position, error) {
 		ID:             pg.ID,
 		LastEditedTime: s.lastMinuteRead,
 	}.toSDKPosition()
-}
-
-func (s *Source) fromSDKPosition(sdkPos sdk.Position) (position, error) {
-	pos := position{}
-	err := json.Unmarshal(sdkPos, &pos)
-	if err != nil {
-		return position{}, fmt.Errorf("failed unmarshalling position: %w", err)
-	}
-	return pos, nil
 }
 
 func (s *Source) getPayload(ctx context.Context, pg client.Page) (sdk.RawData, error) {

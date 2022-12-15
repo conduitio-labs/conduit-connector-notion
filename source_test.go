@@ -99,6 +99,30 @@ func TestSource_Read_PagesSameTimestamp(t *testing.T) {
 	is.Equal(wantPos, r1.Position)
 }
 
+func TestSource_Read_FreshPages_PositionNotSaved(t *testing.T) {
+	// For more information about why we have this test,
+	// see discussion in docs/cdc.md
+	is := is.New(t)
+	ctx := context.Background()
+
+	// todo make sure that reading the pages happens in the same minute
+	p := client.Page{
+		ID:             uuid.New().String(),
+		LastEditedTime: time.Now(),
+	}
+
+	underTest, cl := setupTest(ctx, t)
+	cl.EXPECT().GetPages(gomock.Any()).Return([]client.Page{p}, nil)
+	cl.EXPECT().GetPage(gomock.Any(), p.ID).Return(p, nil)
+
+	rec, err := underTest.Read(ctx)
+	is.NoErr(err)
+
+	got, err := fromSDKPosition(rec.Position)
+	is.NoErr(err)
+	is.True(got.LastEditedTime.IsZero())
+}
+
 func setupTest(ctx context.Context, t *testing.T) (*Source, *mock.Client) {
 	is := is.New(t)
 
