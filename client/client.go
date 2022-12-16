@@ -103,19 +103,19 @@ func (p Page) Title() string {
 	return tp.Title[0].PlainText
 }
 
-type defaultClient struct {
+type DefaultClient struct {
 	client *notion.Client
 }
 
-func New() *defaultClient {
-	return &defaultClient{}
+func New() *DefaultClient {
+	return &DefaultClient{}
 }
 
-func (c *defaultClient) Init(token string) {
+func (c *DefaultClient) Init(token string) {
 	c.client = notion.NewClient(notion.Token(token))
 }
 
-func (c *defaultClient) GetPage(ctx context.Context, id string) (Page, error) {
+func (c *DefaultClient) GetPage(ctx context.Context, id string) (Page, error) {
 	pg, err := c.client.Page.Get(ctx, notion.PageID(id))
 	if err != nil {
 		// The search endpoint that we use to list all the pages
@@ -136,7 +136,7 @@ func (c *defaultClient) GetPage(ctx context.Context, id string) (Page, error) {
 	return newPage(pg, children), err
 }
 
-func (c *defaultClient) notFound(err error) bool {
+func (c *DefaultClient) notFound(err error) bool {
 	nErr, ok := err.(*notion.Error)
 	if !ok {
 		return false
@@ -145,7 +145,7 @@ func (c *defaultClient) notFound(err error) bool {
 }
 
 // getChildren gets all the child and grand-child blocks of the input block
-func (c *defaultClient) getChildren(ctx context.Context, blockID string) ([]notion.Block, error) {
+func (c *DefaultClient) getChildren(ctx context.Context, blockID string) ([]notion.Block, error) {
 	var children []notion.Block
 
 	fetch := true
@@ -183,7 +183,7 @@ func (c *defaultClient) getChildren(ctx context.Context, blockID string) ([]noti
 	return children, nil
 }
 
-func (c *defaultClient) GetPages(ctx context.Context) ([]Page, error) {
+func (c *DefaultClient) GetPages(ctx context.Context) ([]Page, error) {
 	var allPages []Page
 
 	fetch := true
@@ -196,6 +196,10 @@ func (c *defaultClient) GetPages(ctx context.Context) ([]Page, error) {
 
 		sdk.Logger(ctx).Debug().Msgf("got search response with %v results", len(response.Results))
 		pages, err := c.toPages(response.Results)
+		if err != nil {
+			return nil, fmt.Errorf("failed to transformed the pages: %w", err)
+		}
+
 		sdk.Logger(ctx).Info().Msgf("c.toPages returned %v pages", len(pages))
 		allPages = append(allPages, pages...)
 
@@ -207,7 +211,7 @@ func (c *defaultClient) GetPages(ctx context.Context) ([]Page, error) {
 	return allPages, nil
 }
 
-func (c *defaultClient) searchPages(ctx context.Context, cursor notion.Cursor) (*notion.SearchResponse, error) {
+func (c *DefaultClient) searchPages(ctx context.Context, cursor notion.Cursor) (*notion.SearchResponse, error) {
 	req := &notion.SearchRequest{
 		StartCursor: cursor,
 		Sort: &notion.SortObject{
@@ -223,10 +227,10 @@ func (c *defaultClient) searchPages(ctx context.Context, cursor notion.Cursor) (
 	return response, err
 }
 
-func (c *defaultClient) toPages(results []notion.Object) ([]Page, error) {
+func (c *DefaultClient) toPages(results []notion.Object) ([]Page, error) {
 	pages := make([]Page, len(results))
 	for i, res := range results {
-		if "page" != strings.ToLower(res.GetObject().String()) {
+		if strings.ToLower(res.GetObject().String()) != "page" {
 			// shouldn't ever happen, as we requested only the pages in the search method.
 			return nil, fmt.Errorf("got unexpected object %q in search results", res.GetObject().String())
 		}

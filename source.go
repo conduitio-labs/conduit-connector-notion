@@ -21,10 +21,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/conduitio-labs/conduit-connector-notion/client"
 	"strconv"
 	"time"
 
+	"github.com/conduitio-labs/conduit-connector-notion/client"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 

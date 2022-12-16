@@ -17,14 +17,14 @@ package notion
 import (
 	"context"
 	"errors"
+	"testing"
+	"time"
+
 	"github.com/conduitio-labs/conduit-connector-notion/client"
 	"github.com/conduitio-labs/conduit-connector-notion/mock"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
-	"testing"
-	"time"
-
 	"github.com/matryer/is"
 )
 
