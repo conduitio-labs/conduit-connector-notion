@@ -210,7 +210,6 @@ func (s *Source) populateIDs(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(s.config.pollInterval):
-
 		}
 	}
 
