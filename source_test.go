@@ -45,18 +45,18 @@ func TestSource_Teardown_NoOpen(t *testing.T) {
 
 func TestSource_Open_NilPosition(t *testing.T) {
 	is := is.New(t)
-	underTest := NewSource().(*Source)
-	err := underTest.Open(context.Background(), nil)
-	is.NoErr(err)
-	// todo once the "has been edited after" check is moved to the client
-	// make assertions on what time the client gets
-	// and not the unexported fields here
-	is.True(underTest.lastMinuteRead.IsZero())
+	ctx := context.Background()
+	underTest, cl := setupTest(ctx, t, nil)
+	cl.EXPECT().GetPages(ctx, zeroTimeMatcher{}).
+		Return(nil, nil)
+
+	_, err := underTest.Read(ctx)
+	is.True(errors.Is(err, sdk.ErrBackoffRetry))
 }
 
 func TestSource_Open_WithPosition(t *testing.T) {
 	is := is.New(t)
-	underTest := NewSource().(*Source)
+	ctx := context.Background()
 	pos := position{
 		ID:             "test-id",
 		LastEditedTime: time.Now(),
@@ -64,15 +64,18 @@ func TestSource_Open_WithPosition(t *testing.T) {
 	sdkPos, err := pos.toSDKPosition()
 	is.NoErr(err)
 
-	err = underTest.Open(context.Background(), sdkPos)
-	is.NoErr(err)
-	is.True(pos.LastEditedTime.Equal(underTest.lastMinuteRead))
+	underTest, cl := setupTest(ctx, t, sdkPos)
+	cl.EXPECT().GetPages(ctx, timeEqMatcher{pos.LastEditedTime}).
+		Return(nil, nil)
+
+	_, err = underTest.Read(ctx)
+	is.True(errors.Is(err, sdk.ErrBackoffRetry))
 }
 
 func TestSource_Read_NoPages(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	underTest, client := setupTest(ctx, t)
+	underTest, client := setupTest(ctx, t, nil)
 
 	client.EXPECT().
 		GetPages(gomock.Any(), zeroTimeMatcher{}).
@@ -85,7 +88,7 @@ func TestSource_Read_NoPages(t *testing.T) {
 func TestSource_Read_SinglePage(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	underTest, cl := setupTest(ctx, t)
+	underTest, cl := setupTest(ctx, t, nil)
 
 	// pages which were fetched in the same minute
 	// in which they were last edited have special treatment
@@ -110,7 +113,7 @@ func TestSource_Read_SinglePage(t *testing.T) {
 func TestSource_Read_PagesSameTimestamp(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	underTest, cl := setupTest(ctx, t)
+	underTest, cl := setupTest(ctx, t, nil)
 
 	// pages which were fetched in the same minute
 	// in which they were last edited have special treatment
@@ -139,7 +142,7 @@ func TestSource_Read_FreshPages_PositionNotSaved(t *testing.T) {
 	// see discussion in docs/cdc.md
 	is := is.New(t)
 	ctx := context.Background()
-	underTest, cl := setupTest(ctx, t)
+	underTest, cl := setupTest(ctx, t, nil)
 
 	count := 2
 	pages := make([]client.Page, count)
@@ -170,7 +173,7 @@ func TestSource_Read_FreshPages_PositionNotSaved(t *testing.T) {
 func TestSource_Read_PageNotFound(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	underTest, cl := setupTest(ctx, t)
+	underTest, cl := setupTest(ctx, t, nil)
 
 	p := client.Page{
 		ID:             uuid.New().String(),
@@ -188,7 +191,7 @@ func TestSource_Read_PageNotFound(t *testing.T) {
 func TestSource_Read_GetPageError(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	underTest, cl := setupTest(ctx, t)
+	underTest, cl := setupTest(ctx, t, nil)
 
 	p := client.Page{
 		ID:             uuid.New().String(),
@@ -207,7 +210,7 @@ func TestSource_Read_GetPageError(t *testing.T) {
 func TestSource_Read_SearchFailed(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	underTest, cl := setupTest(ctx, t)
+	underTest, cl := setupTest(ctx, t, nil)
 
 	searchErr := errors.New("search failed successfully")
 	cl.EXPECT().GetPages(gomock.Any(), zeroTimeMatcher{}).
@@ -216,7 +219,7 @@ func TestSource_Read_SearchFailed(t *testing.T) {
 	_, err := underTest.Read(ctx)
 	is.True(errors.Is(err, searchErr))
 }
-func setupTest(ctx context.Context, t *testing.T) (*Source, *mock.Client) {
+func setupTest(ctx context.Context, t *testing.T, pos sdk.Position) (*Source, *mock.Client) {
 	is := is.New(t)
 
 	token := "irrelevant-token"
@@ -225,7 +228,7 @@ func setupTest(ctx context.Context, t *testing.T) (*Source, *mock.Client) {
 	underTest := NewSourceWithClient(client)
 	err := underTest.Configure(ctx, map[string]string{Token: token})
 	is.NoErr(err)
-	err = underTest.Open(ctx, nil)
+	err = underTest.Open(ctx, pos)
 	is.NoErr(err)
 
 	return underTest.(*Source), client
