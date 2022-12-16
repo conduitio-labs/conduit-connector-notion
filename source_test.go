@@ -92,12 +92,12 @@ func TestSource_Read_SinglePage(t *testing.T) {
 	cl.EXPECT().GetPage(gomock.Any(), p.ID).Return(p, nil)
 
 	// the position should contain a timestamp
-	wantPos, err := position{ID: p.ID, LastEditedTime: p.LastEditedTime}.toSDKPosition()
-	is.NoErr(err)
-
 	rec, err := underTest.Read(ctx)
 	is.NoErr(err)
-	is.Equal(wantPos, rec.Position)
+
+	gotPos, err := fromSDKPosition(rec.Position)
+	is.NoErr(err)
+	is.True(p.LastEditedTime.Equal(gotPos.LastEditedTime))
 }
 
 func TestSource_Read_PagesSameTimestamp(t *testing.T) {
@@ -117,12 +117,12 @@ func TestSource_Read_PagesSameTimestamp(t *testing.T) {
 
 	// the position should not contain a timestamp
 	// as we didn't read page p2 which is from the same minute
-	wantPos, err := position{ID: p1.ID}.toSDKPosition()
+	rec, err := underTest.Read(ctx)
 	is.NoErr(err)
 
-	r1, err := underTest.Read(ctx)
+	gotPos, err := fromSDKPosition(rec.Position)
 	is.NoErr(err)
-	is.Equal(wantPos, r1.Position)
+	is.True(gotPos.LastEditedTime.IsZero())
 }
 
 func TestSource_Read_FreshPages_PositionNotSaved(t *testing.T) {
