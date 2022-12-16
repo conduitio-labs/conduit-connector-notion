@@ -219,6 +219,7 @@ func TestSource_Read_SearchFailed(t *testing.T) {
 	_, err := underTest.Read(ctx)
 	is.True(errors.Is(err, searchErr))
 }
+
 func setupTest(ctx context.Context, t *testing.T, pos sdk.Position) (*Source, *mock.Client) {
 	is := is.New(t)
 
