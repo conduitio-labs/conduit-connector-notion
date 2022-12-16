@@ -23,6 +23,8 @@ import (
 	"github.com/matryer/is"
 )
 
+var TimeIsZero = zeroTimeMatcher{}
+
 type zeroTimeMatcher struct {
 }
 
@@ -72,19 +74,19 @@ func (t timeEqMatcher) String() string {
 
 func TestZeroTimeMatcher_Nil(t *testing.T) {
 	is := is.New(t)
-	matches := zeroTimeMatcher{}.Matches(nil)
+	matches := TimeIsZero.Matches(nil)
 	is.True(!matches)
 }
 
 func TestZeroTimeMatcher_Match(t *testing.T) {
 	is := is.New(t)
-	matches := zeroTimeMatcher{}.Matches(time.Time{})
+	matches := TimeIsZero.Matches(time.Time{})
 	is.True(matches)
 }
 
 func TestZeroTimeMatcher_NoMatch(t *testing.T) {
 	is := is.New(t)
-	matches := zeroTimeMatcher{}.Matches(time.Now())
+	matches := TimeIsZero.Matches(time.Now())
 	is.True(!matches)
 }
 
