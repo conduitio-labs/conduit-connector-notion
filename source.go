@@ -56,8 +56,11 @@ type recordPayload struct {
 }
 
 type Client interface {
+	// GetPage gets a page with given ID
 	GetPage(ctx context.Context, id string) (client.Page, error)
+	// Init initializes the client with the given access token
 	Init(token string)
+	// GetPages returns *all* pages in Notion
 	GetPages(ctx context.Context) ([]client.Page, error)
 }
 

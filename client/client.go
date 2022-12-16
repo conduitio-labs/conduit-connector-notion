@@ -40,8 +40,9 @@ type Page struct {
 	LastEditedBy   string
 	LastEditedTime time.Time
 	Archived       bool
-	properties     notion.Properties
-	children       []notion.Block
+
+	properties notion.Properties
+	children   []notion.Block
 }
 
 func newPage(pg *notion.Page, children []notion.Block) Page {
