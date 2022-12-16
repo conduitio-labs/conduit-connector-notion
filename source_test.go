@@ -127,7 +127,7 @@ func TestSource_Read_PagesSameTimestamp(t *testing.T) {
 	cl.EXPECT().GetPage(gomock.Any(), p1.ID).
 		Return(p1, nil)
 
-	// the position should not contain a timestamp
+	// the position should NOT contain a timestamp
 	// as we didn't read page p2 which is from the same minute
 	rec, err := underTest.Read(ctx)
 	is.NoErr(err)
@@ -135,6 +135,38 @@ func TestSource_Read_PagesSameTimestamp(t *testing.T) {
 	gotPos, err := fromSDKPosition(rec.Position)
 	is.NoErr(err)
 	is.True(gotPos.LastEditedTime.IsZero())
+}
+
+func TestSource_Read_PagesDifferentTimestamps(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	underTest, cl := setupTest(ctx, t, nil)
+
+	p1 := client.Page{ID: uuid.New().String(), LastEditedTime: time.Now().Add(-2 * time.Hour)}
+	p2 := client.Page{ID: uuid.New().String(), LastEditedTime: time.Now().Add(-time.Hour)}
+
+	cl.EXPECT().GetPages(gomock.Any(), zeroTimeMatcher{}).
+		Return([]client.Page{p1, p2}, nil)
+	cl.EXPECT().GetPage(gomock.Any(), p1.ID).
+		Return(p1, nil)
+	cl.EXPECT().GetPage(gomock.Any(), p2.ID).
+		Return(p2, nil)
+
+	// the position should contain a timestamp
+	// as we page p2 which is NOT from the same minute as p1
+	rec1, err := underTest.Read(ctx)
+	is.NoErr(err)
+
+	pos1, err := fromSDKPosition(rec1.Position)
+	is.NoErr(err)
+	is.True(pos1.LastEditedTime.Equal(p1.LastEditedTime))
+
+	rec2, err := underTest.Read(ctx)
+	is.NoErr(err)
+
+	pos2, err := fromSDKPosition(rec2.Position)
+	is.NoErr(err)
+	is.True(pos2.LastEditedTime.Equal(p2.LastEditedTime))
 }
 
 func TestSource_Read_FreshPages_PositionNotSaved(t *testing.T) {
