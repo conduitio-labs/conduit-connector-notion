@@ -12,65 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package notion
+package test
 
 import (
-	"fmt"
-	"reflect"
 	"testing"
 	"time"
 
 	"github.com/matryer/is"
 )
-
-var TimeIsZero = zeroTimeMatcher{}
-
-type zeroTimeMatcher struct {
-}
-
-func (z zeroTimeMatcher) Matches(x interface{}) bool {
-	if x == nil {
-		return false
-	}
-	val := reflect.ValueOf(x)
-	if val.Kind() == reflect.Pointer {
-		return false
-	}
-	other, ok := val.Interface().(time.Time)
-	if !ok {
-		return false
-	}
-
-	return other.IsZero()
-}
-
-func (z zeroTimeMatcher) String() string {
-	return "is zero time"
-}
-
-type timeEqMatcher struct {
-	t time.Time
-}
-
-func (t timeEqMatcher) Matches(x interface{}) bool {
-	if x == nil {
-		return false
-	}
-	val := reflect.ValueOf(x)
-	if val.Kind() == reflect.Pointer {
-		return false
-	}
-	other, ok := val.Interface().(time.Time)
-	if !ok {
-		return false
-	}
-
-	return t.t.Equal(other)
-}
-
-func (t timeEqMatcher) String() string {
-	return fmt.Sprintf("time is equal to %v (%T)", t.t, t.t)
-}
 
 func TestZeroTimeMatcher_Nil(t *testing.T) {
 	is := is.New(t)
