@@ -8,8 +8,8 @@ download:
 	@go mod download
 
 install-tools: download
-	@echo Installing tools from tools.go
-	@go list -f '{{ join .Imports "\n" }}' tools.go | xargs -tI % go install %
+	@echo Installing mockgen
+	@go install github.com/golang/mock/mockgen
 	@go mod tidy
 
 generate:
