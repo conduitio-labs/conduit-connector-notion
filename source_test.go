@@ -176,10 +176,11 @@ func TestSource_Read_FreshPages_PositionNotSaved(t *testing.T) {
 	ctx := context.Background()
 	underTest, cl := setupTest(ctx, t, nil)
 
+	// todo make sure that reading the pages happens
+	//   in the same minute in which they are last edited
+	// set up test pages
 	count := 2
 	pages := make([]client.Page, count)
-	// todo make sure that reading the pages happens
-	// in the same minute in which they are last edited
 	for i := 0; i < count; i++ {
 		p := client.Page{ID: uuid.New().String(), LastEditedTime: time.Now()}
 		pages[i] = p
