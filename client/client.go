@@ -84,7 +84,6 @@ func (p Page) PlainText(ctx context.Context) (string, error) {
 }
 
 // Title returns a page's title.
-// In case that's not possible, the function returns an empty string.
 func (p Page) Title() string {
 	if len(p.properties) == 0 {
 		return ""
