@@ -38,7 +38,7 @@ func TestExtractText(t *testing.T) {
 				return b, err
 			},
 			// Text in HTML: A paragraph with a link to <a href="https://conduit.io/">Conduit’s website</a>.
-			input: "./test/paragraph-block.json",
+			input: "../test/paragraph-block.json",
 			want:  "A paragraph with a link to Conduit’s website.",
 		},
 		{
@@ -48,7 +48,7 @@ func TestExtractText(t *testing.T) {
 				err := json.Unmarshal(bytes, &b)
 				return b, err
 			},
-			input: "./test/numbered-list-item-block.json",
+			input: "../test/numbered-list-item-block.json",
 			want:  "Numbered item 2",
 		},
 		{
@@ -58,7 +58,7 @@ func TestExtractText(t *testing.T) {
 				err := json.Unmarshal(bytes, &b)
 				return b, err
 			},
-			input: "./test/bookmark-block.json",
+			input: "../test/bookmark-block.json",
 			want:  "https://meroxa.com Meroxa’s web-site",
 		},
 		{
@@ -68,7 +68,7 @@ func TestExtractText(t *testing.T) {
 				err := json.Unmarshal(bytes, &b)
 				return b, err
 			},
-			input: "./test/equation-block.json",
+			input: "../test/equation-block.json",
 			want:  "|x| = 1",
 		},
 	}
