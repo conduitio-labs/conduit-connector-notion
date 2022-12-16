@@ -7,6 +7,7 @@ package mock
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	client "github.com/conduitio-labs/conduit-connector-notion/client"
 	gomock "github.com/golang/mock/gomock"
@@ -51,18 +52,18 @@ func (mr *ClientMockRecorder) GetPage(arg0, arg1 interface{}) *gomock.Call {
 }
 
 // GetPages mocks base method.
-func (m *Client) GetPages(arg0 context.Context) ([]client.Page, error) {
+func (m *Client) GetPages(arg0 context.Context, arg1 time.Time) ([]client.Page, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPages", arg0)
+	ret := m.ctrl.Call(m, "GetPages", arg0, arg1)
 	ret0, _ := ret[0].([]client.Page)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetPages indicates an expected call of GetPages.
-func (mr *ClientMockRecorder) GetPages(arg0 interface{}) *gomock.Call {
+func (mr *ClientMockRecorder) GetPages(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPages", reflect.TypeOf((*Client)(nil).GetPages), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPages", reflect.TypeOf((*Client)(nil).GetPages), arg0, arg1)
 }
 
 // Init mocks base method.
