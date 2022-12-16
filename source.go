@@ -60,7 +60,8 @@ type Client interface {
 	GetPage(ctx context.Context, id string) (client.Page, error)
 	// Init initializes the client with the given access token
 	Init(token string)
-	// GetPages returns *all* pages in Notion
+	// GetPages returns pages that were last edited after `editedAfter`.
+	// Results are sorted by LastEditedTime, ascending.
 	GetPages(ctx context.Context, editedAfter time.Time) ([]client.Page, error)
 }
 
@@ -72,7 +73,7 @@ type Source struct {
 	// lastMinuteRead is the last minute from which we
 	// processed all pages
 	lastMinuteRead time.Time
-	// pages contains pages which need to be fetched
+	// pages contains pages which need to be fetched, sorted by LastEditedTime, ascending
 	pages []client.Page
 	// lastPoll is the time at which we polled Notion the last time
 	lastPoll time.Time
@@ -278,20 +279,24 @@ func (s *Source) getMetadata(pg client.Page) map[string]string {
 
 // savePosition saves the position, if it's safe to do so.
 func (s *Source) savePosition(t time.Time) {
-	// see discussion in docs/cdc.md
-	lastTopMinute := time.Now().Truncate(time.Minute)
-	if t.After(lastTopMinute) {
-		return
-	}
 	// The precision of a page's last_edited_time field is in minutes.
 	// Hence, to save it as a position (from which we can safely resume
 	// reading new records), we need to be sure that all pages from
 	// that minute have been read.
+	// Fore more info, see discussion in docs/cdc.md
 
-	// todo instead of check the queue of IDs to fetch
-	// we can check the respective pages' last_edited_times
-	// and make sure nothing is left from `lastMinuteRead`.
-	if t.Before(s.lastPoll) && len(s.pages) == 0 {
+	// This change came from the same minute in which we searched the Notion API.
+	// That means that we might see some more pages from that page, so it's not
+	// safe to save this position.
+	lastTopMinute := s.lastPoll.Truncate(time.Minute)
+	if t.After(lastTopMinute) {
+		return
+	}
+
+	// s.pages is sorted by LastEditedTime, ascending.
+	// Hence, if the next page is NOT from the same minute as `t`,
+	// then it's safe to save `t` as the position.
+	if len(s.pages) == 0 || s.pages[0].LastEditedTime.After(t) {
 		s.lastMinuteRead = t
 	}
 }
