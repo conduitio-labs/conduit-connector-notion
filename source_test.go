@@ -172,6 +172,34 @@ func TestSource_Read_PageNotFound(t *testing.T) {
 	is.True(errors.Is(err, sdk.ErrBackoffRetry))
 }
 
+func TestSource_Read_GetPageError(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	underTest, cl := setupTest(ctx, t)
+
+	p := client.Page{
+		ID:             uuid.New().String(),
+		LastEditedTime: time.Now(),
+	}
+	pageErr := errors.New("lazy service error")
+	cl.EXPECT().GetPages(gomock.Any()).Return([]client.Page{p}, nil)
+	cl.EXPECT().GetPage(gomock.Any(), p.ID).Return(client.Page{}, pageErr)
+
+	_, err := underTest.Read(ctx)
+	is.True(errors.Is(err, pageErr))
+}
+
+func TestSource_Read_SearchFailed(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	underTest, cl := setupTest(ctx, t)
+
+	searchErr := errors.New("search failed successfully")
+	cl.EXPECT().GetPages(gomock.Any()).Return(nil, searchErr)
+
+	_, err := underTest.Read(ctx)
+	is.True(errors.Is(err, searchErr))
+}
 func setupTest(ctx context.Context, t *testing.T) (*Source, *mock.Client) {
 	is := is.New(t)
 
