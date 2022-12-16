@@ -204,13 +204,18 @@ func (s *Source) populateIDs(ctx context.Context) error {
 			Msg("sleeping before checking for changes")
 		time.Sleep(s.config.pollInterval)
 	}
-	s.lastPoll = time.Now()
+	// todo maybe get the time at which the search was performed from the client
+	// that will make it possible to test it better
+	pollTime := time.Now()
 
 	sdk.Logger(ctx).Debug().Msg("populating IDs")
 	allPages, err := s.client.GetPages(ctx)
 	if err != nil {
 		return fmt.Errorf("failed getting changed pages: %w", err)
 	}
+	// we can set s.lastPoll only when a search succeeds
+	// otherwise, we might miss changes in the next succeeding search
+	s.lastPoll = pollTime
 
 	s.addToFetchIDs(ctx, allPages)
 	sdk.Logger(ctx).Debug().Msgf("fetched %v IDs", len(s.fetchIDs))
@@ -229,6 +234,7 @@ func (s *Source) addToFetchIDs(ctx context.Context, pages []client.Page) {
 			Time("created_time", pg.CreatedTime).
 			Msg("checking if page has changed")
 
+		// todo move the check to the client
 		if pg.LastEditedTime.After(s.lastMinuteRead) {
 			s.fetchIDs = append(s.fetchIDs, pg.ID)
 		}

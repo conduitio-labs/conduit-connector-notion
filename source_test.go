@@ -48,6 +48,9 @@ func TestSource_Open_NilPosition(t *testing.T) {
 	underTest := NewSource().(*Source)
 	err := underTest.Open(context.Background(), nil)
 	is.NoErr(err)
+	// todo once the "has been edited after" check is moved to the client
+	// make assertions on what time the client gets
+	// and not the unexported fields here
 	is.True(underTest.lastMinuteRead.IsZero())
 }
 
