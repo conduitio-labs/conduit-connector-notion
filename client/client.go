@@ -20,7 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	notion "github.com/conduitio-labs/notionapi"
@@ -195,7 +194,7 @@ func (c *DefaultClient) getChildren(ctx context.Context, blockID string) ([]noti
 	return children, nil
 }
 
-func (c *DefaultClient) GetPages(ctx context.Context) ([]Page, error) {
+func (c *DefaultClient) GetPages(ctx context.Context, editerAfter time.Time) ([]Page, error) {
 	var allPages []Page
 
 	fetch := true
@@ -205,21 +204,19 @@ func (c *DefaultClient) GetPages(ctx context.Context) ([]Page, error) {
 		if err != nil {
 			return nil, fmt.Errorf("search failed: %w", err)
 		}
+		sdk.Logger(ctx).
+			Debug().
+			Msgf("got search response with %v results", len(response.Results))
 
-		sdk.Logger(ctx).Debug().Msgf("got search response with %v results", len(response.Results))
-		pages, err := c.toPages(response.Results)
-		if err != nil {
-			return nil, fmt.Errorf("failed to transformed the pages: %w", err)
-		}
-
-		sdk.Logger(ctx).Info().Msgf("c.toPages returned %v pages", len(pages))
-		allPages = append(allPages, pages...)
+		c.addResults(allPages, response.Results, editerAfter)
 
 		fetch = response.HasMore
 		cursor = response.NextCursor
 	}
 
-	sdk.Logger(ctx).Info().Msgf("GetPages: %v pages", len(allPages))
+	sdk.Logger(ctx).
+		Info().
+		Msgf("GetPages returned %v pages", len(allPages))
 	return allPages, nil
 }
 
@@ -239,17 +236,13 @@ func (c *DefaultClient) searchPages(ctx context.Context, cursor notion.Cursor) (
 	return response, err
 }
 
-func (c *DefaultClient) toPages(results []notion.Object) ([]Page, error) {
-	pages := make([]Page, len(results))
-	for i, res := range results {
-		if strings.ToLower(res.GetObject().String()) != "page" {
-			// shouldn't ever happen, as we requested only the pages in the search method.
-			return nil, fmt.Errorf("got unexpected object %q in search results", res.GetObject().String())
+func (c *DefaultClient) addResults(pages []Page, results []notion.Object, editedAfter time.Time) {
+	for _, res := range results {
+		page := res.(*notion.Page)
+		if page.LastEditedTime.After(editedAfter) {
+			pages = append(pages, NewPage(page, nil))
 		}
-		pages[i] = NewPage(res.(*notion.Page), nil)
 	}
-
-	return pages, nil
 }
 
 // toJSON converts `v` into a JSON string.
