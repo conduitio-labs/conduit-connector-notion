@@ -16,10 +16,11 @@ package notion
 
 import (
 	"fmt"
-	is "github.com/matryer/is"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/matryer/is"
 )
 
 type zeroTimeMatcher struct {
@@ -31,7 +32,7 @@ func (z zeroTimeMatcher) Matches(x interface{}) bool {
 	}
 	val := reflect.ValueOf(x)
 	if val.Kind() == reflect.Pointer {
-		val = val.Elem()
+		return false
 	}
 	other, ok := val.Interface().(time.Time)
 	if !ok {
@@ -55,7 +56,7 @@ func (t timeEqMatcher) Matches(x interface{}) bool {
 	}
 	val := reflect.ValueOf(x)
 	if val.Kind() == reflect.Pointer {
-		val = val.Elem()
+		return false
 	}
 	other, ok := val.Interface().(time.Time)
 	if !ok {
@@ -67,6 +68,24 @@ func (t timeEqMatcher) Matches(x interface{}) bool {
 
 func (t timeEqMatcher) String() string {
 	return fmt.Sprintf("time is equal to %v (%T)", t.t, t.t)
+}
+
+func TestZeroTimeMatcher_Nil(t *testing.T) {
+	is := is.New(t)
+	matches := zeroTimeMatcher{}.Matches(nil)
+	is.True(!matches)
+}
+
+func TestZeroTimeMatcher_Match(t *testing.T) {
+	is := is.New(t)
+	matches := zeroTimeMatcher{}.Matches(time.Time{})
+	is.True(matches)
+}
+
+func TestZeroTimeMatcher_NoMatch(t *testing.T) {
+	is := is.New(t)
+	matches := zeroTimeMatcher{}.Matches(time.Now())
+	is.True(!matches)
 }
 
 func TestTimeEqMatcher_Nil(t *testing.T) {
@@ -87,21 +106,5 @@ func TestTimeEqMatcher_NoMatch(t *testing.T) {
 	is := is.New(t)
 	t1, _ := time.Parse(time.RFC3339, "2006-01-02T15:04:05Z07:00")
 	matches := timeEqMatcher{t1}.Matches(time.Now())
-	is.True(!matches)
-}
-
-func TestTimeEqMatcher_Match_Ptr(t *testing.T) {
-	is := is.New(t)
-	t1, _ := time.Parse(time.RFC3339, "2006-01-02T15:04:05Z07:00")
-	t2, _ := time.Parse(time.RFC3339, "2006-01-02T15:04:05Z07:00")
-	matches := timeEqMatcher{t1}.Matches(&t2)
-	is.True(matches)
-}
-
-func TestTimeEqMatcher_NoMatch_Ptr(t *testing.T) {
-	is := is.New(t)
-	t1, _ := time.Parse(time.RFC3339, "2006-01-02T15:04:05Z07:00")
-	t2 := time.Now()
-	matches := timeEqMatcher{t1}.Matches(&t2)
 	is.True(!matches)
 }
