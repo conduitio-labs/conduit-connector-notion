@@ -22,6 +22,7 @@ import (
 
 	"github.com/conduitio-labs/conduit-connector-notion/client"
 	"github.com/conduitio-labs/conduit-connector-notion/mock"
+	"github.com/conduitio-labs/conduit-connector-notion/test"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/golang/mock/gomock"
 	"github.com/google/uuid"
@@ -47,7 +48,7 @@ func TestSource_Open_NilPosition(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	underTest, cl := setupTest(ctx, t, nil)
-	cl.EXPECT().GetPages(ctx, TimeIsZero).
+	cl.EXPECT().GetPages(ctx, test.TimeIsZero).
 		Return(nil, nil)
 
 	_, err := underTest.Read(ctx)
@@ -65,7 +66,7 @@ func TestSource_Open_WithPosition(t *testing.T) {
 	is.NoErr(err)
 
 	underTest, cl := setupTest(ctx, t, sdkPos)
-	cl.EXPECT().GetPages(ctx, timeEqMatcher{pos.LastEditedTime}).
+	cl.EXPECT().GetPages(ctx, test.TimeEq(pos.LastEditedTime)).
 		Return(nil, nil)
 
 	_, err = underTest.Read(ctx)
@@ -78,7 +79,7 @@ func TestSource_Read_NoPages(t *testing.T) {
 	underTest, client := setupTest(ctx, t, nil)
 
 	client.EXPECT().
-		GetPages(gomock.Any(), TimeIsZero).
+		GetPages(gomock.Any(), test.TimeIsZero).
 		Return(nil, nil)
 
 	_, err := underTest.Read(ctx)
@@ -96,7 +97,7 @@ func TestSource_Read_SinglePage(t *testing.T) {
 	lastEdited := time.Now().Add(-time.Hour)
 	p := client.Page{ID: uuid.New().String(), LastEditedTime: lastEdited}
 
-	cl.EXPECT().GetPages(gomock.Any(), TimeIsZero).
+	cl.EXPECT().GetPages(gomock.Any(), test.TimeIsZero).
 		Return([]client.Page{p}, nil)
 	cl.EXPECT().GetPage(gomock.Any(), p.ID).
 		Return(p, nil)
@@ -122,7 +123,7 @@ func TestSource_Read_PagesSameTimestamp(t *testing.T) {
 	p1 := client.Page{ID: uuid.New().String(), LastEditedTime: lastEdited}
 	p2 := client.Page{ID: uuid.New().String(), LastEditedTime: lastEdited}
 
-	cl.EXPECT().GetPages(gomock.Any(), TimeIsZero).
+	cl.EXPECT().GetPages(gomock.Any(), test.TimeIsZero).
 		Return([]client.Page{p1, p2}, nil)
 	cl.EXPECT().GetPage(gomock.Any(), p1.ID).
 		Return(p1, nil)
@@ -145,7 +146,7 @@ func TestSource_Read_PagesDifferentTimestamps(t *testing.T) {
 	p1 := client.Page{ID: uuid.New().String(), LastEditedTime: time.Now().Add(-2 * time.Hour)}
 	p2 := client.Page{ID: uuid.New().String(), LastEditedTime: time.Now().Add(-time.Hour)}
 
-	cl.EXPECT().GetPages(gomock.Any(), TimeIsZero).
+	cl.EXPECT().GetPages(gomock.Any(), test.TimeIsZero).
 		Return([]client.Page{p1, p2}, nil)
 	cl.EXPECT().GetPage(gomock.Any(), p1.ID).
 		Return(p1, nil)
@@ -187,7 +188,7 @@ func TestSource_Read_FreshPages_PositionNotSaved(t *testing.T) {
 		cl.EXPECT().GetPage(gomock.Any(), p.ID).
 			Return(p, nil)
 	}
-	cl.EXPECT().GetPages(gomock.Any(), TimeIsZero).
+	cl.EXPECT().GetPages(gomock.Any(), test.TimeIsZero).
 		Return(pages, nil)
 
 	// Both resulting records should have NO timestamp in their position
@@ -212,7 +213,7 @@ func TestSource_Read_PageNotFound(t *testing.T) {
 		ID:             uuid.New().String(),
 		LastEditedTime: time.Now(),
 	}
-	cl.EXPECT().GetPages(gomock.Any(), TimeIsZero).
+	cl.EXPECT().GetPages(gomock.Any(), test.TimeIsZero).
 		Return([]client.Page{p}, nil)
 	cl.EXPECT().GetPage(gomock.Any(), p.ID).
 		Return(p, client.ErrPageNotFound)
@@ -231,7 +232,7 @@ func TestSource_Read_GetPageError(t *testing.T) {
 		LastEditedTime: time.Now(),
 	}
 	pageErr := errors.New("lazy service error")
-	cl.EXPECT().GetPages(gomock.Any(), TimeIsZero).
+	cl.EXPECT().GetPages(gomock.Any(), test.TimeIsZero).
 		Return([]client.Page{p}, nil)
 	cl.EXPECT().GetPage(gomock.Any(), p.ID).
 		Return(client.Page{}, pageErr)
@@ -246,7 +247,7 @@ func TestSource_Read_SearchFailed(t *testing.T) {
 	underTest, cl := setupTest(ctx, t, nil)
 
 	searchErr := errors.New("search failed successfully")
-	cl.EXPECT().GetPages(gomock.Any(), TimeIsZero).
+	cl.EXPECT().GetPages(gomock.Any(), test.TimeIsZero).
 		Return(nil, searchErr)
 
 	_, err := underTest.Read(ctx)
