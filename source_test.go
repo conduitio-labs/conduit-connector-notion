@@ -74,7 +74,9 @@ func TestSource_Read_NoPages(t *testing.T) {
 	ctx := context.Background()
 	underTest, client := setupTest(ctx, t)
 
-	client.EXPECT().GetPages(gomock.Any()).Return(nil, nil)
+	client.EXPECT().
+		GetPages(gomock.Any(), zeroTimeMatcher{}).
+		Return(nil, nil)
 
 	_, err := underTest.Read(ctx)
 	is.True(errors.Is(err, sdk.ErrBackoffRetry))
@@ -91,8 +93,10 @@ func TestSource_Read_SinglePage(t *testing.T) {
 	lastEdited := time.Now().Add(-time.Hour)
 	p := client.Page{ID: uuid.New().String(), LastEditedTime: lastEdited}
 
-	cl.EXPECT().GetPages(gomock.Any()).Return([]client.Page{p}, nil)
-	cl.EXPECT().GetPage(gomock.Any(), p.ID).Return(p, nil)
+	cl.EXPECT().GetPages(gomock.Any(), zeroTimeMatcher{}).
+		Return([]client.Page{p}, nil)
+	cl.EXPECT().GetPage(gomock.Any(), p.ID).
+		Return(p, nil)
 
 	// the position should contain a timestamp
 	rec, err := underTest.Read(ctx)
@@ -115,8 +119,10 @@ func TestSource_Read_PagesSameTimestamp(t *testing.T) {
 	p1 := client.Page{ID: uuid.New().String(), LastEditedTime: lastEdited}
 	p2 := client.Page{ID: uuid.New().String(), LastEditedTime: lastEdited}
 
-	cl.EXPECT().GetPages(gomock.Any()).Return([]client.Page{p1, p2}, nil)
-	cl.EXPECT().GetPage(gomock.Any(), p1.ID).Return(p1, nil)
+	cl.EXPECT().GetPages(gomock.Any(), zeroTimeMatcher{}).
+		Return([]client.Page{p1, p2}, nil)
+	cl.EXPECT().GetPage(gomock.Any(), p1.ID).
+		Return(p1, nil)
 
 	// the position should not contain a timestamp
 	// as we didn't read page p2 which is from the same minute
@@ -142,9 +148,11 @@ func TestSource_Read_FreshPages_PositionNotSaved(t *testing.T) {
 	for i := 0; i < count; i++ {
 		p := client.Page{ID: uuid.New().String(), LastEditedTime: time.Now()}
 		pages[i] = p
-		cl.EXPECT().GetPage(gomock.Any(), p.ID).Return(p, nil)
+		cl.EXPECT().GetPage(gomock.Any(), p.ID).
+			Return(p, nil)
 	}
-	cl.EXPECT().GetPages(gomock.Any()).Return(pages, nil)
+	cl.EXPECT().GetPages(gomock.Any(), zeroTimeMatcher{}).
+		Return(pages, nil)
 
 	// Both resulting records should have NO timestamp in their position
 	// We use two pages and two records, as there's some logic relying
@@ -168,8 +176,10 @@ func TestSource_Read_PageNotFound(t *testing.T) {
 		ID:             uuid.New().String(),
 		LastEditedTime: time.Now(),
 	}
-	cl.EXPECT().GetPages(gomock.Any()).Return([]client.Page{p}, nil)
-	cl.EXPECT().GetPage(gomock.Any(), p.ID).Return(p, client.ErrPageNotFound)
+	cl.EXPECT().GetPages(gomock.Any(), zeroTimeMatcher{}).
+		Return([]client.Page{p}, nil)
+	cl.EXPECT().GetPage(gomock.Any(), p.ID).
+		Return(p, client.ErrPageNotFound)
 
 	_, err := underTest.Read(ctx)
 	is.True(errors.Is(err, sdk.ErrBackoffRetry))
@@ -185,8 +195,10 @@ func TestSource_Read_GetPageError(t *testing.T) {
 		LastEditedTime: time.Now(),
 	}
 	pageErr := errors.New("lazy service error")
-	cl.EXPECT().GetPages(gomock.Any()).Return([]client.Page{p}, nil)
-	cl.EXPECT().GetPage(gomock.Any(), p.ID).Return(client.Page{}, pageErr)
+	cl.EXPECT().GetPages(gomock.Any(), zeroTimeMatcher{}).
+		Return([]client.Page{p}, nil)
+	cl.EXPECT().GetPage(gomock.Any(), p.ID).
+		Return(client.Page{}, pageErr)
 
 	_, err := underTest.Read(ctx)
 	is.True(errors.Is(err, pageErr))
@@ -198,7 +210,8 @@ func TestSource_Read_SearchFailed(t *testing.T) {
 	underTest, cl := setupTest(ctx, t)
 
 	searchErr := errors.New("search failed successfully")
-	cl.EXPECT().GetPages(gomock.Any()).Return(nil, searchErr)
+	cl.EXPECT().GetPages(gomock.Any(), zeroTimeMatcher{}).
+		Return(nil, searchErr)
 
 	_, err := underTest.Read(ctx)
 	is.True(errors.Is(err, searchErr))
