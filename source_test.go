@@ -17,11 +17,11 @@ package notion
 import (
 	"context"
 	"errors"
-	"github.com/conduitio-labs/conduit-connector-notion/matchers"
 	"testing"
 	"time"
 
 	"github.com/conduitio-labs/conduit-connector-notion/client"
+	"github.com/conduitio-labs/conduit-connector-notion/matchers"
 	"github.com/conduitio-labs/conduit-connector-notion/mock"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/golang/mock/gomock"

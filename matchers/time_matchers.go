@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"reflect"
 	"time"
+
+	"github.com/golang/mock/gomock"
 )
 
 var TimeIsZero = zeroTimeMatcher{}
@@ -49,7 +51,7 @@ type timeEqMatcher struct {
 	t time.Time
 }
 
-func TimeEq(t time.Time) timeEqMatcher {
+func TimeEq(t time.Time) gomock.Matcher {
 	return timeEqMatcher{t: t}
 }
 
