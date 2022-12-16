@@ -32,11 +32,14 @@ var (
 )
 
 type Page struct {
-	ID             string
-	Parent         string
-	URL            string
-	CreatedBy      string
-	CreatedTime    time.Time
+	ID string
+	// Parent is a JSON string describing the page's parent object
+	Parent string
+	URL    string
+	// CreatedBy is a JSON string describing the user who created this page
+	CreatedBy   string
+	CreatedTime time.Time
+	// LastEditedBy is a JSON string describing the user who last edited this page
 	LastEditedBy   string
 	LastEditedTime time.Time
 	Archived       bool
@@ -45,7 +48,7 @@ type Page struct {
 	children   []notion.Block
 }
 
-func newPage(pg *notion.Page, children []notion.Block) Page {
+func NewPage(pg *notion.Page, children []notion.Block) Page {
 	return Page{
 		ID:             pg.ID.String(),
 		Parent:         toJSON(pg.Parent),
@@ -60,16 +63,7 @@ func newPage(pg *notion.Page, children []notion.Block) Page {
 	}
 }
 
-// toJSON converts `v` into a JSON string.
-// In case that's not possible, the function returns an empty string.
-func toJSON(v any) string {
-	bytes, err := json.Marshal(v)
-	if err != nil {
-		return ""
-	}
-	return string(bytes)
-}
-
+// PlainText returns a plain text representation of a page
 func (p Page) PlainText(ctx context.Context) (string, error) {
 	var plainText string
 	for _, c := range p.children {
@@ -89,7 +83,7 @@ func (p Page) PlainText(ctx context.Context) (string, error) {
 	return plainText, nil
 }
 
-// title returns a page's title.
+// Title returns a page's title.
 // In case that's not possible, the function returns an empty string.
 func (p Page) Title() string {
 	if len(p.properties) == 0 {
@@ -134,7 +128,7 @@ func (c *DefaultClient) GetPage(ctx context.Context, id string) (Page, error) {
 	if err != nil {
 		return Page{}, fmt.Errorf("failed fetching content for %v: %w", id, err)
 	}
-	return newPage(pg, children), err
+	return NewPage(pg, children), err
 }
 
 func (c *DefaultClient) notFound(err error) bool {
@@ -235,8 +229,18 @@ func (c *DefaultClient) toPages(results []notion.Object) ([]Page, error) {
 			// shouldn't ever happen, as we requested only the pages in the search method.
 			return nil, fmt.Errorf("got unexpected object %q in search results", res.GetObject().String())
 		}
-		pages[i] = newPage(res.(*notion.Page), nil)
+		pages[i] = NewPage(res.(*notion.Page), nil)
 	}
 
 	return pages, nil
+}
+
+// toJSON converts `v` into a JSON string.
+// In case that's not possible, the function returns an empty string.
+func toJSON(v any) string {
+	bytes, err := json.Marshal(v)
+	if err != nil {
+		return ""
+	}
+	return string(bytes)
 }
