@@ -83,8 +83,7 @@ func TestClient_GetPages_Empty(t *testing.T) {
 		Search: search,
 	}
 
-	req := pageSearchRequest()
-	search.EXPECT().Do(gomock.Any(), req).
+	search.EXPECT().Do(gomock.Any(), pageSearchRequest("")).
 		Return(&notion.SearchResponse{}, nil)
 
 	pages, err := underTest.GetPages(ctx, time.Time{})
@@ -103,7 +102,6 @@ func TestClient_GetPages_FilterByTimestamp(t *testing.T) {
 		Search: search,
 	}
 
-	req := pageSearchRequest()
 	resp := &notion.SearchResponse{
 		Results: []notion.Object{
 			&notion.Page{
@@ -116,7 +114,7 @@ func TestClient_GetPages_FilterByTimestamp(t *testing.T) {
 			},
 		},
 	}
-	search.EXPECT().Do(gomock.Any(), req).
+	search.EXPECT().Do(gomock.Any(), pageSearchRequest("")).
 		Return(resp, nil)
 
 	pages, err := underTest.GetPages(ctx, time.Now().Add(-time.Hour))
@@ -125,9 +123,51 @@ func TestClient_GetPages_FilterByTimestamp(t *testing.T) {
 	is.Equal("page-2", pages[0].ID)
 }
 
-func pageSearchRequest() *notion.SearchRequest {
+func TestClient_GetPages_Pagination(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	search := mock.NewSearchService(ctrl)
+
+	underTest := New()
+	underTest.client = &notion.Client{
+		Search: search,
+	}
+
+	resp1 := &notion.SearchResponse{
+		Results: []notion.Object{
+			&notion.Page{
+				ID:             "page-1",
+				LastEditedTime: time.Now().Add(-2 * time.Hour),
+			},
+		},
+		HasMore:    true,
+		NextCursor: "next-cursor",
+	}
+	resp2 := &notion.SearchResponse{
+		Results: []notion.Object{
+			&notion.Page{
+				ID:             "page-2",
+				LastEditedTime: time.Now(),
+			},
+		},
+		HasMore: false,
+	}
+	search.EXPECT().Do(gomock.Any(), pageSearchRequest("")).
+		Return(resp1, nil)
+	search.EXPECT().Do(gomock.Any(), pageSearchRequest("next-cursor")).
+		Return(resp2, nil)
+
+	pages, err := underTest.GetPages(ctx, time.Time{})
+	is.NoErr(err)
+	is.Equal(2, len(pages))
+	is.Equal("page-1", pages[0].ID)
+	is.Equal("page-2", pages[1].ID)
+}
+
+func pageSearchRequest(startCursor string) *notion.SearchRequest {
 	return &notion.SearchRequest{
-		StartCursor: "",
+		StartCursor: notion.Cursor(startCursor),
 		Sort: &notion.SortObject{
 			Direction: notion.SortOrderASC,
 			Timestamp: notion.TimestampLastEdited,
