@@ -198,7 +198,7 @@ func (c *DefaultClient) getChildren(ctx context.Context, blockID string) ([]noti
 	return children, nil
 }
 
-func (c *DefaultClient) GetPages(ctx context.Context, editerAfter time.Time) ([]Page, error) {
+func (c *DefaultClient) GetPages(ctx context.Context, editedAfter time.Time) ([]Page, error) {
 	var allPages []Page
 
 	fetch := true
@@ -212,7 +212,12 @@ func (c *DefaultClient) GetPages(ctx context.Context, editerAfter time.Time) ([]
 			Debug().
 			Msgf("got search response with %v results", len(response.Results))
 
-		c.addResults(allPages, response.Results, editerAfter)
+		for _, res := range response.Results {
+			page := res.(*notion.Page)
+			if page.LastEditedTime.After(editedAfter) {
+				allPages = append(allPages, NewPage(page, nil))
+			}
+		}
 
 		fetch = response.HasMore
 		cursor = response.NextCursor
@@ -241,12 +246,7 @@ func (c *DefaultClient) searchPages(ctx context.Context, cursor notion.Cursor) (
 }
 
 func (c *DefaultClient) addResults(pages []Page, results []notion.Object, editedAfter time.Time) {
-	for _, res := range results {
-		page := res.(*notion.Page)
-		if page.LastEditedTime.After(editedAfter) {
-			pages = append(pages, NewPage(page, nil))
-		}
-	}
+
 }
 
 // toJSON converts `v` into a JSON string.
