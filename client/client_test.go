@@ -17,13 +17,14 @@ package client
 import (
 	"context"
 	"errors"
+	"net/http"
+	"testing"
+	"time"
+
 	"github.com/conduitio-labs/conduit-connector-notion/client/mock"
 	notion "github.com/conduitio-labs/notionapi"
 	"github.com/golang/mock/gomock"
 	"github.com/matryer/is"
-	"net/http"
-	"testing"
-	"time"
 )
 
 func TestClient_GetPage(t *testing.T) {
