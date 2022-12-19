@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate mockgen -destination=mock/page.go -package=mock -mock_names=PageService=PageService github.com/conduitio-labs/notionapi PageService
+//go:generate mockgen -destination=mock/block.go -package=mock -mock_names=BlockService=BlockService github.com/conduitio-labs/notionapi BlockService
+//go:generate mockgen -destination=mock/search.go -package=mock -mock_names=SearchService=SearchService github.com/conduitio-labs/notionapi SearchService
+
 package client
 
 import (
