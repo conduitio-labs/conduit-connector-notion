@@ -245,10 +245,6 @@ func (c *DefaultClient) searchPages(ctx context.Context, cursor notion.Cursor) (
 	return response, err
 }
 
-func (c *DefaultClient) addResults(pages []Page, results []notion.Object, editedAfter time.Time) {
-
-}
-
 // toJSON converts `v` into a JSON string.
 // In case that's not possible, the function returns an empty string.
 func toJSON(v any) string {
