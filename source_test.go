@@ -25,7 +25,6 @@ import (
 	"github.com/conduitio-labs/conduit-connector-notion/mock"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/golang/mock/gomock"
-	"github.com/google/uuid"
 	"github.com/matryer/is"
 )
 
@@ -95,7 +94,7 @@ func TestSource_Read_SinglePage(t *testing.T) {
 	// in which they were last edited have special treatment
 	// Also see: TestSource_Read_FreshPages_PositionNotSaved
 	lastEdited := time.Now().Add(-time.Hour)
-	p := client.Page{ID: uuid.New().String(), LastEditedTime: lastEdited}
+	p := client.Page{ID: "page-id-1", LastEditedTime: lastEdited}
 
 	cl.EXPECT().GetPages(gomock.Any(), matchers.TimeIsZero).
 		Return([]client.Page{p}, nil)
@@ -120,8 +119,8 @@ func TestSource_Read_PagesSameTimestamp(t *testing.T) {
 	// in which they were last edited have special treatment
 	// Also see: TestSource_Read_FreshPages_PositionNotSaved
 	lastEdited := time.Now().Add(-time.Hour)
-	p1 := client.Page{ID: uuid.New().String(), LastEditedTime: lastEdited}
-	p2 := client.Page{ID: uuid.New().String(), LastEditedTime: lastEdited}
+	p1 := client.Page{ID: "page-id-1", LastEditedTime: lastEdited}
+	p2 := client.Page{ID: "page-id-2", LastEditedTime: lastEdited}
 
 	cl.EXPECT().GetPages(gomock.Any(), matchers.TimeIsZero).
 		Return([]client.Page{p1, p2}, nil)
@@ -143,8 +142,8 @@ func TestSource_Read_PagesDifferentTimestamps(t *testing.T) {
 	ctx := context.Background()
 	underTest, cl := setupTest(ctx, t, nil)
 
-	p1 := client.Page{ID: uuid.New().String(), LastEditedTime: time.Now().Add(-2 * time.Hour)}
-	p2 := client.Page{ID: uuid.New().String(), LastEditedTime: time.Now().Add(-time.Hour)}
+	p1 := client.Page{ID: "page-id-1", LastEditedTime: time.Now().Add(-2 * time.Hour)}
+	p2 := client.Page{ID: "page-id-2", LastEditedTime: time.Now().Add(-time.Hour)}
 
 	cl.EXPECT().GetPages(gomock.Any(), matchers.TimeIsZero).
 		Return([]client.Page{p1, p2}, nil)
@@ -183,7 +182,7 @@ func TestSource_Read_FreshPages_PositionNotSaved(t *testing.T) {
 	count := 2
 	pages := make([]client.Page, count)
 	for i := 0; i < count; i++ {
-		p := client.Page{ID: uuid.New().String(), LastEditedTime: time.Now()}
+		p := client.Page{ID: "page-id-1", LastEditedTime: time.Now()}
 		pages[i] = p
 		cl.EXPECT().GetPage(gomock.Any(), p.ID).
 			Return(p, nil)
@@ -210,7 +209,7 @@ func TestSource_Read_PageNotFound(t *testing.T) {
 	underTest, cl := setupTest(ctx, t, nil)
 
 	p := client.Page{
-		ID:             uuid.New().String(),
+		ID:             "page-id-1",
 		LastEditedTime: time.Now(),
 	}
 	cl.EXPECT().GetPages(gomock.Any(), matchers.TimeIsZero).
@@ -228,7 +227,7 @@ func TestSource_Read_GetPageError(t *testing.T) {
 	underTest, cl := setupTest(ctx, t, nil)
 
 	p := client.Page{
-		ID:             uuid.New().String(),
+		ID:             "page-id-1",
 		LastEditedTime: time.Now(),
 	}
 	pageErr := errors.New("lazy service error")
