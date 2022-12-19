@@ -92,6 +92,39 @@ func TestClient_GetPages_Empty(t *testing.T) {
 	is.True(len(pages) == 0)
 }
 
+func TestClient_GetPages_FilterByTimestamp(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	search := mock.NewSearchService(ctrl)
+
+	underTest := New()
+	underTest.client = &notion.Client{
+		Search: search,
+	}
+
+	req := pageSearchRequest()
+	resp := &notion.SearchResponse{
+		Results: []notion.Object{
+			&notion.Page{
+				ID:             "page-1",
+				LastEditedTime: time.Now().Add(-2 * time.Hour),
+			},
+			&notion.Page{
+				ID:             "page-2",
+				LastEditedTime: time.Now(),
+			},
+		},
+	}
+	search.EXPECT().Do(gomock.Any(), req).
+		Return(resp, nil)
+
+	pages, err := underTest.GetPages(ctx, time.Now().Add(-time.Hour))
+	is.NoErr(err)
+	is.Equal(1, len(pages))
+	is.Equal("page-2", pages[0].ID)
+}
+
 func pageSearchRequest() *notion.SearchRequest {
 	return &notion.SearchRequest{
 		StartCursor: "",
