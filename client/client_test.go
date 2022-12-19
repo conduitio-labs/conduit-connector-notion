@@ -31,19 +31,19 @@ func TestClient_GetPage(t *testing.T) {
 	ctx := context.Background()
 	id := "test-page-id"
 	ctrl := gomock.NewController(t)
-	pageService := mock.NewPageService(ctrl)
-	blockService := mock.NewBlockService(ctrl)
+	page := mock.NewPageService(ctrl)
+	block := mock.NewBlockService(ctrl)
 
 	underTest := New()
 	underTest.client = &notion.Client{
-		Page:  pageService,
-		Block: blockService,
+		Page:  page,
+		Block: block,
 	}
 
 	notionPage := &notion.Page{ID: notion.ObjectID(id)}
-	pageService.EXPECT().Get(gomock.Any(), notion.PageID(id)).
+	page.EXPECT().Get(gomock.Any(), notion.PageID(id)).
 		Return(notionPage, nil)
-	blockService.EXPECT().GetChildren(gomock.Any(), notion.BlockID(id), gomock.Any()).
+	block.EXPECT().GetChildren(gomock.Any(), notion.BlockID(id), gomock.Any()).
 		Return(&notion.GetChildrenResponse{}, nil)
 
 	want := NewPage(notionPage, nil)
@@ -57,14 +57,14 @@ func TestClient_GetPage_NotFound(t *testing.T) {
 	ctx := context.Background()
 	id := "test-page-id"
 	ctrl := gomock.NewController(t)
-	pageService := mock.NewPageService(ctrl)
+	page := mock.NewPageService(ctrl)
 
 	underTest := New()
 	underTest.client = &notion.Client{
-		Page: pageService,
+		Page: page,
 	}
 
-	pageService.EXPECT().Get(gomock.Any(), notion.PageID(id)).
+	page.EXPECT().Get(gomock.Any(), notion.PageID(id)).
 		Return(nil, &notion.Error{Status: http.StatusNotFound})
 
 	_, err := underTest.GetPage(ctx, id)
@@ -75,15 +75,15 @@ func TestClient_GetPages_Empty(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
 	ctrl := gomock.NewController(t)
-	searchService := mock.NewSearchService(ctrl)
+	search := mock.NewSearchService(ctrl)
 
 	underTest := New()
 	underTest.client = &notion.Client{
-		Search: searchService,
+		Search: search,
 	}
 
 	req := pageSearchRequest()
-	searchService.EXPECT().Do(gomock.Any(), req).
+	search.EXPECT().Do(gomock.Any(), req).
 		Return(&notion.SearchResponse{}, nil)
 
 	pages, err := underTest.GetPages(ctx, time.Time{})
