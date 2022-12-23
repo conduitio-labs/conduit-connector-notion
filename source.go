@@ -192,6 +192,10 @@ func (s *Source) nextPage(ctx context.Context) (sdk.Record, error) {
 func (s *Source) getChildren(ctx context.Context, block notion.Block) ([]notion.Block, error) {
 	if block.GetType() == notion.BlockTypeUnsupported {
 		// skip children of unsupported block types
+		sdk.Logger(ctx).Warn().
+			Str("block_type", block.GetType().String()).
+			Str("block_id", block.GetID().String()).
+			Msg("skipping children of unsupported block")
 		return []notion.Block{}, nil
 	}
 
@@ -220,13 +224,19 @@ func (s *Source) getChildren(ctx context.Context, block notion.Block) ([]notion.
 		for _, child := range resp.Results {
 			children = append(children, child)
 			// Skip children of unsupported block types
-			if child.GetType() != notion.BlockTypeUnsupported {
-				grandChildren, err := s.getChildren(ctx, child)
-				if err != nil {
-					return nil, err
-				}
-				children = append(children, grandChildren...)
+			if child.GetType() == notion.BlockTypeUnsupported {
+				sdk.Logger(ctx).Warn().
+					Str("block_type", child.GetType().String()).
+					Str("block_id", child.GetID().String()).
+					Msg("skipping unsupported child block")
+				continue
 			}
+
+			grandChildren, err := s.getChildren(ctx, child)
+			if err != nil {
+				return nil, err
+			}
+			children = append(children, grandChildren...)
 		}
 
 		fetch = resp.HasMore
