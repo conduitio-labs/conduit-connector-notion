@@ -17,10 +17,19 @@ package notion
 import (
 	"context"
 	"errors"
+	"fmt"
+	sdk "github.com/conduitio/conduit-connector-sdk"
+	"github.com/google/go-cmp/cmp"
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/matryer/is"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	notion "github.com/conduitio-labs/notionapi"
+	"github.com/conduitio-labs/notionapi/mock"
 )
 
 func TestSource_Config_FailsWhenEmpty(t *testing.T) {
@@ -59,4 +68,104 @@ func TestSource_Open_WithPosition(t *testing.T) {
 	err = underTest.Open(context.Background(), sdkPos)
 	is.NoErr(err)
 	is.True(pos.LastEditedTime.Equal(underTest.lastMinuteRead))
+}
+
+func TestSource_Configure(t *testing.T) {
+	tests := []struct {
+		desc   string
+		input  map[string]string
+		output Config
+		err    error
+	}{
+		{
+			desc:   "Succeed without override",
+			input:  map[string]string{},
+			output: Config{token: "", pollInterval: time.Minute},
+		},
+		{
+			desc: "Succeed with override",
+			input: map[string]string{
+				Token:        "abc-def",
+				PollInterval: "2m",
+			},
+			output: Config{token: "abc-def", pollInterval: 2 * time.Minute},
+		},
+		{
+			desc: "Fail to override poll interval because too small",
+			input: map[string]string{
+				Token:        "abc-def",
+				PollInterval: "1s",
+			},
+			err: fmt.Errorf("sad"),
+		},
+		{
+			desc: "Fail to override poll interval because not a time",
+			input: map[string]string{
+				Token:        "abc-def",
+				PollInterval: "a",
+			},
+			err: fmt.Errorf("sad"),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.desc, func(t *testing.T) {
+			ctx := context.Background()
+			s := &Source{}
+
+			err := s.Configure(ctx, tc.input)
+			if tc.err == nil {
+				require.NoError(t, err)
+				diff := cmp.Diff(tc.output, s.config)
+				require.Emptyf(t, diff, diff)
+			} else {
+				assert.Equal(t, tc.err, err)
+			}
+		})
+	}
+}
+
+func TestSource_Read(t *testing.T) {
+	tests := []struct {
+		desc           string
+		client         func(ctrl *gomock.Controller) *notion.Client
+		expectedRecord sdk.Record
+		err            error
+	}{
+		{
+			desc: "Succeed with empty responses",
+			client: func(ctrl *gomock.Controller) *notion.Client {
+				c := mock.NewMockNotionClient(ctrl)
+				c.Search.EXPECT().
+					Do(mock.Any(), &notion.SearchRequest{
+						StartCursor: notion.Cursor{},
+						Sort: &notion.SortObject{
+							Direction: notion.SortOrderASC,
+							Timestamp: notion.TimestampLastEdited,
+						},
+						Filter: map[string]string{
+							"property": "object",
+							"value":    "page",
+						},
+					}).Return(&notion.SearchResponse{}, nil).Times(1)
+				return c
+			},
+		},
+	}
+	for _, tc := range tests {
+		ctrl := gomock.NewController(t)
+		s := &Source{client: tc.client(ctrl)}
+
+		t.Run(tc.desc, func(t *testing.T) {
+			ctx := context.Background()
+
+			record, err := s.Read(ctx)
+			if tc.err == nil {
+				require.NoError(t, err)
+				assert.Equal(t, tc.expectedRecord, record)
+			} else {
+				assert.Equal(t, tc.err, err)
+			}
+		})
+	}
 }
