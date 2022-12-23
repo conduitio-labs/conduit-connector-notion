@@ -133,7 +133,7 @@ func (s *Source) nextPage(ctx context.Context) (sdk.Record, error) {
 		Str("page_id", id).
 		Msg("fetching page")
 
-	// fetch the page and then all of its children
+	// fetch the page
 	page, err := s.client.Page.Get(ctx, notion.PageID(id))
 	if err != nil {
 		// The search endpoint that we use to list all the pages
@@ -151,7 +151,25 @@ func (s *Source) nextPage(ctx context.Context) (sdk.Record, error) {
 		return sdk.Record{}, fmt.Errorf("failed fetching page %v: %w", id, err)
 	}
 
-	children, err := s.getChildren(ctx, id)
+	// fetch the page block and then all of its children
+	pageBlock, err := s.client.Block.Get(ctx, notion.BlockID(page.ID))
+	if err != nil {
+		// The search endpoint that we use to list all the pages
+		// can return stale results.
+		// It's also possible that a page has been deleted after
+		// we got the ID but before we actually read the whole page.
+		if s.notFound(err) {
+			sdk.Logger(ctx).Info().
+				Str("block_id", id).
+				Msg("the resource does not exist or the resource has not been shared with owner of the token")
+
+			return s.nextPage(ctx)
+		}
+
+		return sdk.Record{}, fmt.Errorf("failed fetching page block %v: %w", id, err)
+	}
+
+	children, err := s.getChildren(ctx, pageBlock)
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed fetching content for %v: %w", id, err)
 	}
@@ -171,7 +189,16 @@ func (s *Source) nextPage(ctx context.Context) (sdk.Record, error) {
 }
 
 // getChildren gets all the child and grand-child blocks of the input block
-func (s *Source) getChildren(ctx context.Context, blockID string) ([]notion.Block, error) {
+func (s *Source) getChildren(ctx context.Context, block notion.Block) ([]notion.Block, error) {
+	if block.GetType() == notion.BlockTypeUnsupported {
+		// skip children of unsupported block types
+		sdk.Logger(ctx).Warn().
+			Str("block_type", block.GetType().String()).
+			Str("block_id", block.GetID().String()).
+			Msg("skipping children of unsupported block")
+		return []notion.Block{}, nil
+	}
+
 	var children []notion.Block
 
 	fetch := true
@@ -179,7 +206,7 @@ func (s *Source) getChildren(ctx context.Context, blockID string) ([]notion.Bloc
 	for fetch {
 		resp, err := s.client.Block.GetChildren(
 			ctx,
-			notion.BlockID(blockID),
+			block.GetID(),
 			&notion.Pagination{
 				StartCursor: cursor,
 			},
@@ -187,7 +214,7 @@ func (s *Source) getChildren(ctx context.Context, blockID string) ([]notion.Bloc
 		if err != nil {
 			return nil, fmt.Errorf(
 				"failed getting children for block ID %v, cursor %v: %w",
-				blockID,
+				block.GetID(),
 				cursor,
 				err,
 			)
@@ -196,7 +223,16 @@ func (s *Source) getChildren(ctx context.Context, blockID string) ([]notion.Bloc
 		// get grandchildren as well
 		for _, child := range resp.Results {
 			children = append(children, child)
-			grandChildren, err := s.getChildren(ctx, child.GetID().String())
+			// Skip children of unsupported block types
+			if child.GetType() == notion.BlockTypeUnsupported {
+				sdk.Logger(ctx).Warn().
+					Str("block_type", child.GetType().String()).
+					Str("block_id", child.GetID().String()).
+					Msg("skipping unsupported child block")
+				continue
+			}
+
+			grandChildren, err := s.getChildren(ctx, child)
 			if err != nil {
 				return nil, err
 			}
