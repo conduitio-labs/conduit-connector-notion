@@ -18,6 +18,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"testing"
 	"time"
 
@@ -134,13 +136,19 @@ func TestSource_Read(t *testing.T) {
 		err            error
 	}{
 		{
-			desc: "Succeed with empty responses",
+			desc: "Succeed with one response",
 			client: func(ctrl *gomock.Controller) *notion.Client {
+				var cursor notion.Cursor = "weeeeee"
+				id := notion.ObjectID("abc")
+				os := []notion.Object{&notion.Page{Object: notion.ObjectTypePage, ID: id, LastEditedTime: time.Now().Truncate(time.Minute).Add(-1 * time.Second)}}
+
 				c := mock.NewMockNotionClient(ctrl)
-				/*
-					c.Search.EXPECT().
-						Do(mock.Any(), &notion.SearchRequest{
-							StartCursor: notion.Cursor{},
+				mss := mock.NewMockSearchService(ctrl)
+				mss.EXPECT().
+					Do(
+						gomock.Any(),
+						&notion.SearchRequest{
+							StartCursor: "",
 							Sort: &notion.SortObject{
 								Direction: notion.SortOrderASC,
 								Timestamp: notion.TimestampLastEdited,
@@ -149,27 +157,88 @@ func TestSource_Read(t *testing.T) {
 								"property": "object",
 								"value":    "page",
 							},
-						}).Return(&notion.SearchResponse{}, nil).Times(1)
+						}).
+					Return(&notion.SearchResponse{
+						Object:     "page",
+						Results:    os,
+						HasMore:    false,
+						NextCursor: cursor,
+					}, nil).
+					Times(1)
+				ps := mock.NewMockPageService(ctrl)
+				ps.EXPECT().Get(
+					gomock.Any(),
+					notion.PageID(id)).
+					Return(os[0], nil).
+					Times(1)
 
-				*/
+				block := mock.NewMockBlock(ctrl)
+				block.EXPECT().GetType().Return(notion.BlockType(notion.ObjectTypePage))
+				block.EXPECT().GetID().Return(notion.BlockID(id)).Times(1)
+
+				bs := mock.NewMockBlockService(ctrl)
+				bs.EXPECT().Get(
+					gomock.Any(), notion.BlockID(id)).
+					Return(block, nil).
+					Times(1)
+				bs.EXPECT().
+					GetChildren(gomock.Any(), notion.BlockID(id), &notion.Pagination{}).
+					Return(&notion.GetChildrenResponse{}, nil).
+					Times(1)
+				c.Search = mss
+				c.Page = ps
+				c.Block = bs
 				return c
 			},
+			expectedRecord: sdk.Record{
+				Position: []byte(""),
+				Key:      sdk.RawData(""),
+				Payload:  sdk.RawData(""),
+			},
 		},
+		/*
+			{
+				desc: "Succeed with unsupported",
+				client: func(ctrl *gomock.Controller) *notion.Client {
+					return nil
+				},
+			},
+
+		*/
 	}
 	for _, tc := range tests {
-		ctrl := gomock.NewController(t)
-		s := &Source{client: tc.client(ctrl)}
 
 		t.Run(tc.desc, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			s := &Source{client: tc.client(ctrl)}
+			s.lastMinuteRead = time.Now().Add(-1 * time.Minute)
+
 			ctx := context.Background()
 
 			record, err := s.Read(ctx)
 			if tc.err == nil {
 				require.NoError(t, err)
-				assert.Equal(t, tc.expectedRecord, record)
+				diff := cmp.Diff(tc.expectedRecord, record, cmpopts.IgnoreFields(sdk.Record{}, "CreatedAt"))
+				assert.Emptyf(t, diff, diff)
 			} else {
 				assert.Equal(t, tc.err, err)
 			}
 		})
 	}
+}
+
+type object struct {
+	data data
+}
+
+type data struct {
+	t string
+}
+
+func (o *object) GetObject() notion.ObjectType {
+	return notion.ObjectType(o.data.t)
+}
+
+func (d *data) String() string {
+	return d.t
 }
