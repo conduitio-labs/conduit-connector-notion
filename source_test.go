@@ -21,10 +21,10 @@ import (
 	"time"
 
 	"github.com/conduitio-labs/conduit-connector-notion/client"
+	"github.com/conduitio-labs/conduit-connector-notion/matchers"
 	"github.com/conduitio-labs/conduit-connector-notion/mock"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 	"github.com/golang/mock/gomock"
-	"github.com/google/uuid"
 	"github.com/matryer/is"
 )
 
@@ -45,18 +45,18 @@ func TestSource_Teardown_NoOpen(t *testing.T) {
 
 func TestSource_Open_NilPosition(t *testing.T) {
 	is := is.New(t)
-	underTest := NewSource().(*Source)
-	err := underTest.Open(context.Background(), nil)
-	is.NoErr(err)
-	// todo once the "has been edited after" check is moved to the client
-	// make assertions on what time the client gets
-	// and not the unexported fields here
-	is.True(underTest.lastMinuteRead.IsZero())
+	ctx := context.Background()
+	underTest, cl := setupTest(ctx, t, nil)
+	cl.EXPECT().GetPages(ctx, matchers.TimeIsZero).
+		Return(nil, nil)
+
+	_, err := underTest.Read(ctx)
+	is.True(errors.Is(err, sdk.ErrBackoffRetry))
 }
 
 func TestSource_Open_WithPosition(t *testing.T) {
 	is := is.New(t)
-	underTest := NewSource().(*Source)
+	ctx := context.Background()
 	pos := position{
 		ID:             "test-id",
 		LastEditedTime: time.Now(),
@@ -64,17 +64,22 @@ func TestSource_Open_WithPosition(t *testing.T) {
 	sdkPos, err := pos.toSDKPosition()
 	is.NoErr(err)
 
-	err = underTest.Open(context.Background(), sdkPos)
-	is.NoErr(err)
-	is.True(pos.LastEditedTime.Equal(underTest.lastMinuteRead))
+	underTest, cl := setupTest(ctx, t, sdkPos)
+	cl.EXPECT().GetPages(ctx, matchers.TimeEq(pos.LastEditedTime)).
+		Return(nil, nil)
+
+	_, err = underTest.Read(ctx)
+	is.True(errors.Is(err, sdk.ErrBackoffRetry))
 }
 
 func TestSource_Read_NoPages(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	underTest, client := setupTest(ctx, t)
+	underTest, client := setupTest(ctx, t, nil)
 
-	client.EXPECT().GetPages(gomock.Any()).Return(nil, nil)
+	client.EXPECT().
+		GetPages(gomock.Any(), matchers.TimeIsZero).
+		Return(nil, nil)
 
 	_, err := underTest.Read(ctx)
 	is.True(errors.Is(err, sdk.ErrBackoffRetry))
@@ -83,16 +88,18 @@ func TestSource_Read_NoPages(t *testing.T) {
 func TestSource_Read_SinglePage(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	underTest, cl := setupTest(ctx, t)
+	underTest, cl := setupTest(ctx, t, nil)
 
 	// pages which were fetched in the same minute
 	// in which they were last edited have special treatment
 	// Also see: TestSource_Read_FreshPages_PositionNotSaved
 	lastEdited := time.Now().Add(-time.Hour)
-	p := client.Page{ID: uuid.New().String(), LastEditedTime: lastEdited}
+	p := client.Page{ID: "page-id-1", LastEditedTime: lastEdited}
 
-	cl.EXPECT().GetPages(gomock.Any()).Return([]client.Page{p}, nil)
-	cl.EXPECT().GetPage(gomock.Any(), p.ID).Return(p, nil)
+	cl.EXPECT().GetPages(gomock.Any(), matchers.TimeIsZero).
+		Return([]client.Page{p}, nil)
+	cl.EXPECT().GetPage(gomock.Any(), p.ID).
+		Return(p, nil)
 
 	// the position should contain a timestamp
 	rec, err := underTest.Read(ctx)
@@ -106,19 +113,21 @@ func TestSource_Read_SinglePage(t *testing.T) {
 func TestSource_Read_PagesSameTimestamp(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	underTest, cl := setupTest(ctx, t)
+	underTest, cl := setupTest(ctx, t, nil)
 
 	// pages which were fetched in the same minute
 	// in which they were last edited have special treatment
 	// Also see: TestSource_Read_FreshPages_PositionNotSaved
 	lastEdited := time.Now().Add(-time.Hour)
-	p1 := client.Page{ID: uuid.New().String(), LastEditedTime: lastEdited}
-	p2 := client.Page{ID: uuid.New().String(), LastEditedTime: lastEdited}
+	p1 := client.Page{ID: "page-id-1", LastEditedTime: lastEdited}
+	p2 := client.Page{ID: "page-id-2", LastEditedTime: lastEdited}
 
-	cl.EXPECT().GetPages(gomock.Any()).Return([]client.Page{p1, p2}, nil)
-	cl.EXPECT().GetPage(gomock.Any(), p1.ID).Return(p1, nil)
+	cl.EXPECT().GetPages(gomock.Any(), matchers.TimeIsZero).
+		Return([]client.Page{p1, p2}, nil)
+	cl.EXPECT().GetPage(gomock.Any(), p1.ID).
+		Return(p1, nil)
 
-	// the position should not contain a timestamp
+	// the position should NOT contain a timestamp
 	// as we didn't read page p2 which is from the same minute
 	rec, err := underTest.Read(ctx)
 	is.NoErr(err)
@@ -128,23 +137,58 @@ func TestSource_Read_PagesSameTimestamp(t *testing.T) {
 	is.True(gotPos.LastEditedTime.IsZero())
 }
 
+func TestSource_Read_PagesDifferentTimestamps(t *testing.T) {
+	is := is.New(t)
+	ctx := context.Background()
+	underTest, cl := setupTest(ctx, t, nil)
+
+	p1 := client.Page{ID: "page-id-1", LastEditedTime: time.Now().Add(-2 * time.Hour)}
+	p2 := client.Page{ID: "page-id-2", LastEditedTime: time.Now().Add(-time.Hour)}
+
+	cl.EXPECT().GetPages(gomock.Any(), matchers.TimeIsZero).
+		Return([]client.Page{p1, p2}, nil)
+	cl.EXPECT().GetPage(gomock.Any(), p1.ID).
+		Return(p1, nil)
+	cl.EXPECT().GetPage(gomock.Any(), p2.ID).
+		Return(p2, nil)
+
+	// the position should contain a timestamp
+	// as we page p2 which is NOT from the same minute as p1
+	rec1, err := underTest.Read(ctx)
+	is.NoErr(err)
+
+	pos1, err := fromSDKPosition(rec1.Position)
+	is.NoErr(err)
+	is.True(pos1.LastEditedTime.Equal(p1.LastEditedTime))
+
+	rec2, err := underTest.Read(ctx)
+	is.NoErr(err)
+
+	pos2, err := fromSDKPosition(rec2.Position)
+	is.NoErr(err)
+	is.True(pos2.LastEditedTime.Equal(p2.LastEditedTime))
+}
+
 func TestSource_Read_FreshPages_PositionNotSaved(t *testing.T) {
 	// For more information about why we have this test,
 	// see discussion in docs/cdc.md
 	is := is.New(t)
 	ctx := context.Background()
-	underTest, cl := setupTest(ctx, t)
+	underTest, cl := setupTest(ctx, t, nil)
 
+	// todo make sure that reading the pages happens
+	//   in the same minute in which they are last edited
+	// set up test pages
 	count := 2
 	pages := make([]client.Page, count)
-	// todo make sure that reading the pages happens
-	// in the same minute in which they are last edited
 	for i := 0; i < count; i++ {
-		p := client.Page{ID: uuid.New().String(), LastEditedTime: time.Now()}
+		p := client.Page{ID: "page-id-1", LastEditedTime: time.Now()}
 		pages[i] = p
-		cl.EXPECT().GetPage(gomock.Any(), p.ID).Return(p, nil)
+		cl.EXPECT().GetPage(gomock.Any(), p.ID).
+			Return(p, nil)
 	}
-	cl.EXPECT().GetPages(gomock.Any()).Return(pages, nil)
+	cl.EXPECT().GetPages(gomock.Any(), matchers.TimeIsZero).
+		Return(pages, nil)
 
 	// Both resulting records should have NO timestamp in their position
 	// We use two pages and two records, as there's some logic relying
@@ -162,14 +206,16 @@ func TestSource_Read_FreshPages_PositionNotSaved(t *testing.T) {
 func TestSource_Read_PageNotFound(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	underTest, cl := setupTest(ctx, t)
+	underTest, cl := setupTest(ctx, t, nil)
 
 	p := client.Page{
-		ID:             uuid.New().String(),
+		ID:             "page-id-1",
 		LastEditedTime: time.Now(),
 	}
-	cl.EXPECT().GetPages(gomock.Any()).Return([]client.Page{p}, nil)
-	cl.EXPECT().GetPage(gomock.Any(), p.ID).Return(p, client.ErrPageNotFound)
+	cl.EXPECT().GetPages(gomock.Any(), matchers.TimeIsZero).
+		Return([]client.Page{p}, nil)
+	cl.EXPECT().GetPage(gomock.Any(), p.ID).
+		Return(p, client.ErrPageNotFound)
 
 	_, err := underTest.Read(ctx)
 	is.True(errors.Is(err, sdk.ErrBackoffRetry))
@@ -178,15 +224,17 @@ func TestSource_Read_PageNotFound(t *testing.T) {
 func TestSource_Read_GetPageError(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	underTest, cl := setupTest(ctx, t)
+	underTest, cl := setupTest(ctx, t, nil)
 
 	p := client.Page{
-		ID:             uuid.New().String(),
+		ID:             "page-id-1",
 		LastEditedTime: time.Now(),
 	}
 	pageErr := errors.New("lazy service error")
-	cl.EXPECT().GetPages(gomock.Any()).Return([]client.Page{p}, nil)
-	cl.EXPECT().GetPage(gomock.Any(), p.ID).Return(client.Page{}, pageErr)
+	cl.EXPECT().GetPages(gomock.Any(), matchers.TimeIsZero).
+		Return([]client.Page{p}, nil)
+	cl.EXPECT().GetPage(gomock.Any(), p.ID).
+		Return(client.Page{}, pageErr)
 
 	_, err := underTest.Read(ctx)
 	is.True(errors.Is(err, pageErr))
@@ -195,15 +243,17 @@ func TestSource_Read_GetPageError(t *testing.T) {
 func TestSource_Read_SearchFailed(t *testing.T) {
 	is := is.New(t)
 	ctx := context.Background()
-	underTest, cl := setupTest(ctx, t)
+	underTest, cl := setupTest(ctx, t, nil)
 
 	searchErr := errors.New("search failed successfully")
-	cl.EXPECT().GetPages(gomock.Any()).Return(nil, searchErr)
+	cl.EXPECT().GetPages(gomock.Any(), matchers.TimeIsZero).
+		Return(nil, searchErr)
 
 	_, err := underTest.Read(ctx)
 	is.True(errors.Is(err, searchErr))
 }
-func setupTest(ctx context.Context, t *testing.T) (*Source, *mock.Client) {
+
+func setupTest(ctx context.Context, t *testing.T, pos sdk.Position) (*Source, *mock.Client) {
 	is := is.New(t)
 
 	token := "irrelevant-token"
@@ -212,7 +262,7 @@ func setupTest(ctx context.Context, t *testing.T) (*Source, *mock.Client) {
 	underTest := NewSourceWithClient(client)
 	err := underTest.Configure(ctx, map[string]string{Token: token})
 	is.NoErr(err)
-	err = underTest.Open(ctx, nil)
+	err = underTest.Open(ctx, pos)
 	is.NoErr(err)
 
 	return underTest.(*Source), client

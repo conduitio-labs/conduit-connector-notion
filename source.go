@@ -60,8 +60,9 @@ type Client interface {
 	GetPage(ctx context.Context, id string) (client.Page, error)
 	// Init initializes the client with the given access token
 	Init(token string)
-	// GetPages returns *all* pages in Notion
-	GetPages(ctx context.Context) ([]client.Page, error)
+	// GetPages returns pages that were last edited after `editedAfter`.
+	// Results are sorted by LastEditedTime, ascending.
+	GetPages(ctx context.Context, editedAfter time.Time) ([]client.Page, error)
 }
 
 type Source struct {
@@ -72,8 +73,8 @@ type Source struct {
 	// lastMinuteRead is the last minute from which we
 	// processed all pages
 	lastMinuteRead time.Time
-	// fetchIDs contains IDs of pages which need to be fetched
-	fetchIDs []string
+	// pages contains pages which need to be fetched, sorted by LastEditedTime, ascending
+	pages []client.Page
 	// lastPoll is the time at which we polled Notion the last time
 	lastPoll time.Time
 }
@@ -145,37 +146,37 @@ func (s *Source) Read(ctx context.Context) (sdk.Record, error) {
 }
 
 func (s *Source) nextPage(ctx context.Context) (sdk.Record, error) {
-	if len(s.fetchIDs) == 0 {
+	if len(s.pages) == 0 {
 		return sdk.Record{}, sdk.ErrBackoffRetry
 	}
 
-	id := s.fetchIDs[0]
-	s.fetchIDs = s.fetchIDs[1:]
+	page := s.pages[0]
+	s.pages = s.pages[1:]
 
 	sdk.Logger(ctx).Debug().
-		Str("page_id", id).
+		Str("page_id", page.ID).
 		Msg("fetching page")
 
 	// fetch the page and then all of its children
-	pg, err := s.client.GetPage(ctx, id)
+	pg, err := s.client.GetPage(ctx, page.ID)
 	// The search endpoint that we use to list all the pages
 	// can return stale results.
 	// It's also possible that a page has been deleted after
 	// we got the ID but before we actually read the whole page.
 	if errors.Is(err, client.ErrPageNotFound) {
 		sdk.Logger(ctx).Info().
-			Str("block_id", id).
+			Str("block_id", page.ID).
 			Msg("the resource does not exist or the resource has not been shared with owner of the token")
 
 		return s.nextPage(ctx)
 	}
 	if err != nil {
-		return sdk.Record{}, fmt.Errorf("failed fetching page %v: %w", id, err)
+		return sdk.Record{}, fmt.Errorf("failed fetching page %v: %w", page, err)
 	}
 
 	record, err := s.pageToRecord(ctx, pg)
 	if err != nil {
-		return sdk.Record{}, fmt.Errorf("failed transforming page %v to record: %w", id, err)
+		return sdk.Record{}, fmt.Errorf("failed transforming page %v to record: %w", page, err)
 	}
 
 	s.savePosition(pg.LastEditedTime)
@@ -196,7 +197,7 @@ func (s *Source) Teardown(context.Context) error {
 }
 
 func (s *Source) populateIDs(ctx context.Context) error {
-	if len(s.fetchIDs) > 0 {
+	if len(s.pages) > 0 {
 		return nil
 	}
 
@@ -205,43 +206,28 @@ func (s *Source) populateIDs(ctx context.Context) error {
 		sdk.Logger(ctx).Debug().
 			Dur("poll_interval", s.config.pollInterval).
 			Msg("sleeping before checking for changes")
-		time.Sleep(s.config.pollInterval)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(s.config.pollInterval):
+		}
 	}
+
 	// todo maybe get the time at which the search was performed from the client
 	// that will make it possible to test it better
-	pollTime := time.Now()
+	lastPoll := time.Now()
 
 	sdk.Logger(ctx).Debug().Msg("populating IDs")
-	allPages, err := s.client.GetPages(ctx)
+	pages, err := s.client.GetPages(ctx, s.lastMinuteRead)
 	if err != nil {
 		return fmt.Errorf("failed getting changed pages: %w", err)
 	}
-	// we can set s.lastPoll only when a search succeeds
-	// otherwise, we might miss changes in the next succeeding search
-	s.lastPoll = pollTime
 
-	s.addToFetchIDs(ctx, allPages)
-	sdk.Logger(ctx).Debug().Msgf("fetched %v IDs", len(s.fetchIDs))
+	s.lastPoll = lastPoll
+	s.pages = pages
+	sdk.Logger(ctx).Debug().Msgf("fetched %v IDs", len(s.pages))
 
 	return nil
-}
-
-func (s *Source) addToFetchIDs(ctx context.Context, pages []client.Page) {
-	sdk.Logger(ctx).Debug().
-		Msgf("checking %v pages for changes", len(pages))
-
-	for _, pg := range pages {
-		sdk.Logger(ctx).Trace().
-			Str("page_id", pg.ID).
-			Time("last_edited_time", pg.LastEditedTime).
-			Time("created_time", pg.CreatedTime).
-			Msg("checking if page has changed")
-
-		// todo move the check to the client
-		if pg.LastEditedTime.After(s.lastMinuteRead) {
-			s.fetchIDs = append(s.fetchIDs, pg.ID)
-		}
-	}
 }
 
 func (s *Source) pageToRecord(ctx context.Context, pg client.Page) (sdk.Record, error) {
@@ -292,20 +278,24 @@ func (s *Source) getMetadata(pg client.Page) map[string]string {
 
 // savePosition saves the position, if it's safe to do so.
 func (s *Source) savePosition(t time.Time) {
-	// see discussion in docs/cdc.md
-	lastTopMinute := time.Now().Truncate(time.Minute)
-	if t.After(lastTopMinute) {
-		return
-	}
 	// The precision of a page's last_edited_time field is in minutes.
 	// Hence, to save it as a position (from which we can safely resume
 	// reading new records), we need to be sure that all pages from
 	// that minute have been read.
+	// Fore more info, see discussion in docs/cdc.md
 
-	// todo instead of check the queue of IDs to fetch
-	// we can check the respective pages' last_edited_times
-	// and make sure nothing is left from `lastMinuteRead`.
-	if t.Before(s.lastPoll) && len(s.fetchIDs) == 0 {
+	// This change came from the same minute in which we searched the Notion API.
+	// That means that we might see some more pages from that page, so it's not
+	// safe to save this position.
+	lastTopMinute := s.lastPoll.Truncate(time.Minute)
+	if t.After(lastTopMinute) {
+		return
+	}
+
+	// s.pages is sorted by LastEditedTime, ascending.
+	// Hence, if the next page is NOT from the same minute as `t`,
+	// then it's safe to save `t` as the position.
+	if len(s.pages) == 0 || s.pages[0].LastEditedTime.After(t) {
 		s.lastMinuteRead = t
 	}
 }
