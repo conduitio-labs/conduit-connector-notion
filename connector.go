@@ -1,4 +1,4 @@
-// Copyright © 2022 Meroxa, Inc.
+// Copyright © 2023 Meroxa, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,17 +14,9 @@
 
 package notion
 
-import (
-	sdk "github.com/conduitio/conduit-connector-sdk"
-)
+import sdk "github.com/conduitio/conduit-connector-sdk"
 
-// NewSpecification returns the connector's specification.
-func NewSpecification() sdk.Specification {
-	return sdk.Specification{
-		Name:        "notion",
-		Summary:     "A Conduit connector for Notion.",
-		Description: "A Conduit connector for Notion.",
-		Version:     "v0.4.0",
-		Author:      "Meroxa, Inc.",
-	}
+var Connector = sdk.Connector{
+	NewSpecification: NewSpecification,
+	NewSource:        NewSource,
 }
