@@ -123,11 +123,29 @@ func (c *DefaultClient) GetPage(ctx context.Context, id string) (Page, error) {
 		return Page{}, fmt.Errorf("failed fetching page %v: %w", id, err)
 	}
 
+	// fetch the page block and then all of its children
+	block, err := c.client.Block.Get(ctx, notion.BlockID(id))
+	if err != nil {
+		if c.notFound(err) {
+			return Page{}, fmt.Errorf("page %v: %w", id, ErrPageNotFound)
+		}
+
+		return Page{}, fmt.Errorf("failed fetching page block %v: %w", id, err)
+	}
+	if block.GetType() == notion.BlockTypeUnsupported {
+		// skip children of unsupported block types
+		sdk.Logger(ctx).Warn().
+			Str("block_type", block.GetType().String()).
+			Str("block_id", block.GetID().String()).
+			Msg("skipping children of unsupported block")
+		return NewPage(pg, nil), nil
+	}
+
 	children, err := c.getChildren(ctx, id)
 	if err != nil {
 		return Page{}, fmt.Errorf("failed fetching content for %v: %w", id, err)
 	}
-	return NewPage(pg, children), err
+	return NewPage(pg, children), nil
 }
 
 func (c *DefaultClient) notFound(err error) bool {
