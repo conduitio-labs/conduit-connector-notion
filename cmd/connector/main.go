@@ -21,9 +21,5 @@ import (
 )
 
 func main() {
-	sdk.Serve(
-		notion.Specification,
-		notion.NewSource,
-		nil,
-	)
+	sdk.Serve(notion.Connector)
 }
