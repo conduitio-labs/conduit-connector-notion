@@ -215,5 +215,5 @@ func setupTest(ctx context.Context, t *testing.T) (*Source, *mock.Client) {
 	err = underTest.Open(ctx, nil)
 	is.NoErr(err)
 
-	return underTest.(*Source), client
+	return underTest, client
 }
