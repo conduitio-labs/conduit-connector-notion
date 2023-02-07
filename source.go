@@ -82,7 +82,7 @@ func NewSource() sdk.Source {
 	return NewSourceWithClient(client.New())
 }
 
-func NewSourceWithClient(c Client) sdk.Source {
+func NewSourceWithClient(c Client) *Source {
 	return &Source{client: c}
 }
 
