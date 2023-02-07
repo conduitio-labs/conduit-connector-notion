@@ -20,7 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	notion "github.com/conduitio-labs/notionapi"
@@ -212,14 +211,14 @@ func (c *DefaultClient) GetPages(ctx context.Context) ([]Page, error) {
 			return nil, fmt.Errorf("failed to transformed the pages: %w", err)
 		}
 
-		sdk.Logger(ctx).Info().Msgf("c.toPages returned %v pages", len(pages))
+		sdk.Logger(ctx).Debug().Msgf("c.toPages returned %v pages", len(pages))
 		allPages = append(allPages, pages...)
 
 		fetch = response.HasMore
 		cursor = response.NextCursor
 	}
 
-	sdk.Logger(ctx).Info().Msgf("GetPages: %v pages", len(allPages))
+	sdk.Logger(ctx).Debug().Msgf("GetPages: %v pages", len(allPages))
 	return allPages, nil
 }
 
@@ -242,11 +241,12 @@ func (c *DefaultClient) searchPages(ctx context.Context, cursor notion.Cursor) (
 func (c *DefaultClient) toPages(results []notion.Object) ([]Page, error) {
 	pages := make([]Page, len(results))
 	for i, res := range results {
-		if strings.ToLower(res.GetObject().String()) != "page" {
+		page, ok := res.(*notion.Page)
+		if !ok {
 			// shouldn't ever happen, as we requested only the pages in the search method.
 			return nil, fmt.Errorf("got unexpected object %q in search results", res.GetObject().String())
 		}
-		pages[i] = NewPage(res.(*notion.Page), nil)
+		pages[i] = NewPage(page, nil)
 	}
 
 	return pages, nil
