@@ -5,6 +5,8 @@ go 1.19
 require (
 	github.com/conduitio-labs/notionapi v0.0.0-20221214135932-7ff748e245f3
 	github.com/conduitio/conduit-connector-sdk v0.5.0
+	github.com/golang/mock v1.6.0
+	github.com/google/uuid v1.1.2
 	github.com/matryer/is v1.4.0
 	github.com/tidwall/gjson v1.14.4
 )
@@ -16,7 +18,6 @@ require (
 	github.com/conduitio/conduit-connector-protocol v0.4.0 // indirect
 	github.com/fatih/color v1.7.0 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
-	github.com/google/uuid v1.1.2 // indirect
 	github.com/hashicorp/go-hclog v0.14.1 // indirect
 	github.com/hashicorp/go-plugin v1.4.3 // indirect
 	github.com/hashicorp/yamux v0.0.0-20180604194846-3520598351bb // indirect

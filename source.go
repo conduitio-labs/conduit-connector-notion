@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:generate mockgen -destination=mock/client.go -package=mock -mock_names=Client=Client . Client
+
 package notion
 
 import (
@@ -19,11 +21,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"strconv"
 	"time"
 
-	notion "github.com/conduitio-labs/notionapi"
+	"github.com/conduitio-labs/conduit-connector-notion/client"
 	sdk "github.com/conduitio/conduit-connector-sdk"
 )
 
@@ -40,16 +41,34 @@ func (p position) toSDKPosition() (sdk.Position, error) {
 	return bytes, nil
 }
 
+func fromSDKPosition(sdkPos sdk.Position) (position, error) {
+	pos := position{}
+	err := json.Unmarshal(sdkPos, &pos)
+	if err != nil {
+		return position{}, fmt.Errorf("failed unmarshalling position: %w", err)
+	}
+	return pos, nil
+}
+
 type recordPayload struct {
 	Plaintext string            `json:"plaintext"`
 	Metadata  map[string]string `json:"metadata"`
+}
+
+type Client interface {
+	// GetPage gets a page with given ID
+	GetPage(ctx context.Context, id string) (client.Page, error)
+	// Init initializes the client with the given access token
+	Init(token string)
+	// GetPages returns *all* pages in Notion
+	GetPages(ctx context.Context) ([]client.Page, error)
 }
 
 type Source struct {
 	sdk.UnimplementedSource
 
 	config Config
-	client *notion.Client
+	client Client
 	// lastMinuteRead is the last minute from which we
 	// processed all pages
 	lastMinuteRead time.Time
@@ -60,7 +79,11 @@ type Source struct {
 }
 
 func NewSource() sdk.Source {
-	return &Source{}
+	return NewSourceWithClient(client.New())
+}
+
+func NewSourceWithClient(c Client) *Source {
+	return &Source{client: c}
 }
 
 func (s *Source) Parameters() map[string]sdk.Parameter {
@@ -93,7 +116,7 @@ func (s *Source) Configure(ctx context.Context, cfg map[string]string) error {
 }
 
 func (s *Source) Open(_ context.Context, pos sdk.Position) error {
-	s.client = notion.NewClient(notion.Token(s.config.token))
+	s.client.Init(s.config.token)
 	err := s.initPosition(pos)
 	if err != nil {
 		return fmt.Errorf("failed initializing position: %w", err)
@@ -106,7 +129,7 @@ func (s *Source) initPosition(sdkPos sdk.Position) error {
 		return nil
 	}
 
-	pos, err := s.fromSDKPosition(sdkPos)
+	pos, err := fromSDKPosition(sdkPos)
 	if err != nil {
 		return err
 	}
@@ -136,116 +159,35 @@ func (s *Source) nextPage(ctx context.Context) (sdk.Record, error) {
 		Str("page_id", id).
 		Msg("fetching page")
 
-	// fetch the page
-	page, err := s.client.Page.Get(ctx, notion.PageID(id))
+	// fetch the page and then all of its children
+	pg, err := s.client.GetPage(ctx, id)
+	// The search endpoint that we use to list all the pages
+	// can return stale results.
+	// It's also possible that a page has been deleted after
+	// we got the ID but before we actually read the whole page.
+	if errors.Is(err, client.ErrPageNotFound) {
+		sdk.Logger(ctx).Info().
+			Str("block_id", id).
+			Msg("the resource does not exist or the resource has not been shared with owner of the token")
+
+		return s.nextPage(ctx)
+	}
 	if err != nil {
-		// The search endpoint that we use to list all the pages
-		// can return stale results.
-		// It's also possible that a page has been deleted after
-		// we got the ID but before we actually read the whole page.
-		if s.notFound(err) {
-			sdk.Logger(ctx).Info().
-				Str("block_id", id).
-				Msg("the resource does not exist or the resource has not been shared with owner of the token")
-
-			return s.nextPage(ctx)
-		}
-
 		return sdk.Record{}, fmt.Errorf("failed fetching page %v: %w", id, err)
 	}
 
-	// fetch the page block and then all of its children
-	pageBlock, err := s.client.Block.Get(ctx, notion.BlockID(page.ID))
-	if err != nil {
-		// The search endpoint that we use to list all the pages
-		// can return stale results.
-		// It's also possible that a page has been deleted after
-		// we got the ID but before we actually read the whole page.
-		if s.notFound(err) {
-			sdk.Logger(ctx).Info().
-				Str("block_id", id).
-				Msg("the resource does not exist or the resource has not been shared with owner of the token")
-
-			return s.nextPage(ctx)
-		}
-
-		return sdk.Record{}, fmt.Errorf("failed fetching page block %v: %w", id, err)
-	}
-
-	children, err := s.getChildren(ctx, pageBlock)
-	if err != nil {
-		return sdk.Record{}, fmt.Errorf("failed fetching content for %v: %w", id, err)
-	}
-
-	record, err := s.pageToRecord(ctx, page, children)
+	record, err := s.pageToRecord(ctx, pg)
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed transforming page %v to record: %w", id, err)
 	}
 
-	s.savePosition(page.LastEditedTime)
-	pos, err := s.getPosition(page)
+	s.savePosition(pg.LastEditedTime)
+	pos, err := s.getPosition(pg)
 	if err != nil {
 		return sdk.Record{}, err
 	}
 	record.Position = pos
 	return record, nil
-}
-
-// getChildren gets all the child and grand-child blocks of the input block
-func (s *Source) getChildren(ctx context.Context, block notion.Block) ([]notion.Block, error) {
-	if block.GetType() == notion.BlockTypeUnsupported {
-		// skip children of unsupported block types
-		sdk.Logger(ctx).Warn().
-			Str("block_type", block.GetType().String()).
-			Str("block_id", block.GetID().String()).
-			Msg("skipping children of unsupported block")
-		return []notion.Block{}, nil
-	}
-
-	var children []notion.Block
-
-	fetch := true
-	var cursor notion.Cursor
-	for fetch {
-		resp, err := s.client.Block.GetChildren(
-			ctx,
-			block.GetID(),
-			&notion.Pagination{
-				StartCursor: cursor,
-			},
-		)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"failed getting children for block ID %v, cursor %v: %w",
-				block.GetID(),
-				cursor,
-				err,
-			)
-		}
-
-		// get grandchildren as well
-		for _, child := range resp.Results {
-			children = append(children, child)
-			// Skip children of unsupported block types
-			if child.GetType() == notion.BlockTypeUnsupported {
-				sdk.Logger(ctx).Warn().
-					Str("block_type", child.GetType().String()).
-					Str("block_id", child.GetID().String()).
-					Msg("skipping unsupported child block")
-				continue
-			}
-
-			grandChildren, err := s.getChildren(ctx, child)
-			if err != nil {
-				return nil, err
-			}
-			children = append(children, grandChildren...)
-		}
-
-		fetch = resp.HasMore
-		cursor = notion.Cursor(resp.NextCursor)
-	}
-	return children, nil
 }
 
 func (s *Source) Ack(context.Context, sdk.Position) error {
@@ -268,71 +210,45 @@ func (s *Source) populateIDs(ctx context.Context) error {
 			Msg("sleeping before checking for changes")
 		time.Sleep(s.config.pollInterval)
 	}
-	s.lastPoll = time.Now()
+	// todo maybe get the time at which the search was performed from the client
+	// that will make it possible to test it better
+	pollTime := time.Now()
 
 	sdk.Logger(ctx).Debug().Msg("populating IDs")
-	fetch := true
-	var cursor notion.Cursor
-	for fetch {
-		results, err := s.getPages(ctx, cursor)
-		if err != nil {
-			return fmt.Errorf("search failed: %w", err)
-		}
-		s.addToFetchIDs(ctx, results)
-
-		fetch = results.HasMore
-		cursor = results.NextCursor
+	allPages, err := s.client.GetPages(ctx)
+	if err != nil {
+		return fmt.Errorf("failed getting changed pages: %w", err)
 	}
+	// we can set s.lastPoll only when a search succeeds
+	// otherwise, we might miss changes in the next succeeding search
+	s.lastPoll = pollTime
 
-	sdk.Logger(ctx).Info().Msgf("fetched %v IDs", len(s.fetchIDs))
+	s.addToFetchIDs(ctx, allPages)
+	sdk.Logger(ctx).Debug().Msgf("fetched %v IDs", len(s.fetchIDs))
+
 	return nil
 }
 
-func (s *Source) addToFetchIDs(ctx context.Context, results *notion.SearchResponse) {
-	for _, result := range results.Results {
-		switch result.GetObject().String() {
-		case "page":
-			page := result.(*notion.Page)
-			sdk.Logger(ctx).Trace().
-				Str("page_id", page.ID.String()).
-				Time("last_edited_time", page.LastEditedTime).
-				Time("created_time", page.CreatedTime).
-				Msg("checking if page has changed")
-			if s.hasChanged(page) {
-				s.fetchIDs = append(s.fetchIDs, page.ID.String())
-			}
-		default:
-			sdk.Logger(ctx).Warn().
-				Str("object_type", result.GetObject().String()).
-				Msg("object type currently not supported")
+func (s *Source) addToFetchIDs(ctx context.Context, pages []client.Page) {
+	sdk.Logger(ctx).Debug().
+		Msgf("checking %v pages for changes", len(pages))
+
+	for _, pg := range pages {
+		sdk.Logger(ctx).Trace().
+			Str("page_id", pg.ID).
+			Time("last_edited_time", pg.LastEditedTime).
+			Time("created_time", pg.CreatedTime).
+			Msg("checking if page has changed")
+
+		// todo move the check to the client
+		if pg.LastEditedTime.After(s.lastMinuteRead) {
+			s.fetchIDs = append(s.fetchIDs, pg.ID)
 		}
 	}
 }
 
-func (s *Source) hasChanged(page *notion.Page) bool {
-	// see discussion in docs/cdc.md
-	lastTopMinute := time.Now().Truncate(time.Minute)
-	return page.LastEditedTime.After(s.lastMinuteRead) &&
-		page.LastEditedTime.Before(lastTopMinute)
-}
-
-func (s *Source) getPages(ctx context.Context, cursor notion.Cursor) (*notion.SearchResponse, error) {
-	req := &notion.SearchRequest{
-		StartCursor: cursor,
-		Sort: &notion.SortObject{
-			Direction: notion.SortOrderASC,
-			Timestamp: notion.TimestampLastEdited,
-		},
-		Filter: map[string]string{
-			"property": "object",
-			"value":    "page",
-		},
-	}
-	return s.client.Search.Do(ctx, req)
-}
-
-func (s *Source) pageToRecord(ctx context.Context, page *notion.Page, children notion.Blocks) (sdk.Record, error) {
-	payload, err := s.getPayload(ctx, children, s.getMetadata(page))
+func (s *Source) pageToRecord(ctx context.Context, pg client.Page) (sdk.Record, error) {
+	payload, err := s.getPayload(ctx, pg)
 	if err != nil {
 		return sdk.Record{}, fmt.Errorf("failed getting payload: %w", err)
 	}
@@ -340,105 +256,50 @@ func (s *Source) pageToRecord(ctx context.Context, page *notion.Page, children n
 	return sdk.Util.Source.NewRecordCreate(
 		nil,
 		nil,
-		sdk.RawData(page.ID),
+		sdk.RawData(pg.ID),
 		payload,
 	), nil
 }
 
-func (s *Source) getPosition(page *notion.Page) (sdk.Position, error) {
-	if page == nil {
-		return nil, nil
-	}
+func (s *Source) getPosition(pg client.Page) (sdk.Position, error) {
 	return position{
-		ID:             page.ID.String(),
+		ID:             pg.ID,
 		LastEditedTime: s.lastMinuteRead,
 	}.toSDKPosition()
 }
 
-func (s *Source) fromSDKPosition(sdkPos sdk.Position) (position, error) {
-	pos := position{}
-	err := json.Unmarshal(sdkPos, &pos)
+func (s *Source) getPayload(ctx context.Context, pg client.Page) (sdk.RawData, error) {
+	plainText, err := pg.PlainText(ctx)
 	if err != nil {
-		return position{}, fmt.Errorf("failed unmarshalling position: %w", err)
+		return nil, err
 	}
-	return pos, nil
-}
-
-func (s *Source) getPayload(
-	ctx context.Context,
-	children notion.Blocks,
-	metadata map[string]string,
-) (sdk.RawData, error) {
-	var plainText string
-	for _, c := range children {
-		text, err := extractText(c)
-		if errors.Is(err, errNoExtractor) {
-			sdk.Logger(ctx).Warn().
-				Str("block_type", c.GetType().String()).
-				Msg("no text extractor registered")
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		plainText += text + "\n"
-	}
-
 	payload := recordPayload{
 		Plaintext: plainText,
-		Metadata:  metadata,
+		Metadata:  s.getMetadata(pg),
 	}
 	return json.Marshal(payload)
 }
 
-func (s *Source) getMetadata(page *notion.Page) map[string]string {
+func (s *Source) getMetadata(pg client.Page) map[string]string {
 	return map[string]string{
-		"notion.title":          s.getPageTitle(page),
-		"notion.url":            page.URL,
-		"notion.createdTime":    page.CreatedTime.Format(time.RFC3339),
-		"notion.lastEditedTime": page.LastEditedTime.Format(time.RFC3339),
-		"notion.createdBy":      s.toJSON(page.CreatedBy),
-		"notion.lastEditedBy":   s.toJSON(page.LastEditedBy),
-		"notion.archived":       strconv.FormatBool(page.Archived),
-		"notion.parent":         s.toJSON(page.Parent),
+		"notion.title":          pg.Title(),
+		"notion.url":            pg.URL,
+		"notion.createdTime":    pg.CreatedTime.Format(time.RFC3339),
+		"notion.lastEditedTime": pg.LastEditedTime.Format(time.RFC3339),
+		"notion.createdBy":      pg.CreatedBy,
+		"notion.lastEditedBy":   pg.LastEditedBy,
+		"notion.archived":       strconv.FormatBool(pg.Archived),
+		"notion.parent":         pg.Parent,
 	}
-}
-
-// toJSON converts `v` into a JSON string.
-// In case that's not possible, the function returns an empty string.
-func (s *Source) toJSON(v any) string {
-	bytes, err := json.Marshal(v)
-	if err != nil {
-		return ""
-	}
-	return string(bytes)
-}
-
-// getPageTitle returns the input page's title.
-// In case that's not possible, the function returns an empty string.
-func (s *Source) getPageTitle(page *notion.Page) string {
-	if page == nil || len(page.Properties) == 0 {
-		return ""
-	}
-
-	tp, ok := page.Properties["title"].(*notion.TitleProperty)
-	if !ok || len(tp.Title) == 0 {
-		return ""
-	}
-
-	return tp.Title[0].PlainText
-}
-
-func (s *Source) notFound(err error) bool {
-	nErr, ok := err.(*notion.Error)
-	if !ok {
-		return false
-	}
-	return nErr.Status == http.StatusNotFound
 }
 
 // savePosition saves the position, if it's safe to do so.
 func (s *Source) savePosition(t time.Time) {
+	// see discussion in docs/cdc.md
+	lastTopMinute := time.Now().Truncate(time.Minute)
+	if t.After(lastTopMinute) {
+		return
+	}
 	// The precision of a page's last_edited_time field is in minutes.
 	// Hence, to save it as a position (from which we can safely resume
 	// reading new records), we need to be sure that all pages from
