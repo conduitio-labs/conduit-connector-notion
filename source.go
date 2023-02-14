@@ -90,13 +90,16 @@ func (s *Source) Parameters() map[string]sdk.Parameter {
 	return map[string]sdk.Parameter{
 		Token: {
 			Default:     "",
-			Required:    true,
 			Description: "Internal integration token.",
+			Validations: []sdk.Validation{
+				sdk.ValidationRequired{},
+			},
 		},
 		PollInterval: {
-			Default:     "1 minute",
-			Required:    false,
-			Description: "Interval at which we poll Notion for changes. A Go duration string.",
+			Default: "1m",
+			Description: "Interval at which we poll Notion for changes. " +
+				"Must not be shorter than 1 minute. " +
+				"A Go duration string.",
 		},
 	}
 }
@@ -250,12 +253,12 @@ func (s *Source) pageToRecord(ctx context.Context, pg client.Page) (sdk.Record, 
 		return sdk.Record{}, fmt.Errorf("failed getting payload: %w", err)
 	}
 
-	return sdk.Record{
-		Metadata:  nil,
-		CreatedAt: time.Now(),
-		Key:       sdk.RawData(pg.ID),
-		Payload:   payload,
-	}, nil
+	return sdk.Util.Source.NewRecordCreate(
+		nil,
+		nil,
+		sdk.RawData(pg.ID),
+		payload,
+	), nil
 }
 
 func (s *Source) getPosition(pg client.Page) (sdk.Position, error) {
