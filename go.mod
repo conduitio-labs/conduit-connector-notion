@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/conduitio-labs/notionapi v0.0.0-20221214135932-7ff748e245f3
-	github.com/conduitio/conduit-connector-sdk v0.6.0
+	github.com/conduitio/conduit-connector-sdk v0.7.0
 	github.com/matryer/is v1.4.1
 	github.com/tidwall/gjson v1.14.4
 )
@@ -31,7 +31,7 @@ require (
 	github.com/mitchellh/reflectwalk v1.0.0 // indirect
 	github.com/oklog/run v1.0.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-	github.com/rs/zerolog v1.29.0 // indirect
+	github.com/rs/zerolog v1.29.1 // indirect
 	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
