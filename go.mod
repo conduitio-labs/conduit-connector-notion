@@ -6,7 +6,7 @@ require (
 	github.com/conduitio-labs/notionapi v0.0.0-20221214135932-7ff748e245f3
 	github.com/conduitio/conduit-connector-sdk v0.7.2
 	github.com/matryer/is v1.4.1
-	github.com/tidwall/gjson v1.15.0
+	github.com/tidwall/gjson v1.16.0
 )
 
 require (
