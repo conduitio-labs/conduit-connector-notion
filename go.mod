@@ -9,7 +9,7 @@ require (
 	github.com/conduitio/conduit-connector-sdk v0.7.2
 	github.com/golangci/golangci-lint v1.59.1
 	github.com/matryer/is v1.4.1
-	github.com/tidwall/gjson v1.17.2
+	github.com/tidwall/gjson v1.17.3
 )
 
 require (
