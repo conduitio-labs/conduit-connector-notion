@@ -7,7 +7,7 @@ toolchain go1.23.3
 require (
 	github.com/conduitio-labs/notionapi v0.0.0-20221214135932-7ff748e245f3
 	github.com/conduitio/conduit-connector-sdk v0.7.2
-	github.com/golangci/golangci-lint v1.63.3
+	github.com/golangci/golangci-lint v1.63.4
 	github.com/matryer/is v1.4.1
 	github.com/tidwall/gjson v1.18.0
 )
