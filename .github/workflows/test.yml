@@ -1,4 +1,4 @@
-name: build
+name: test
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,4 +17,4 @@ jobs:
           go-version-file: 'go.mod'
 
       - name: Test
-        run: make test-integration GOTEST_FLAGS="-v -count=1"
+        run: make test GOTEST_FLAGS="-v -count=1"
