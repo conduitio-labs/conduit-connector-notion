@@ -1,6 +1,6 @@
 module github.com/conduitio-labs/conduit-connector-notion
 
-go 1.24.1
+go 1.24.2
 
 require (
 	github.com/conduitio-labs/notionapi v0.0.0-20221214135932-7ff748e245f3
